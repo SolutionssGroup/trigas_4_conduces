@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="sale_order_form_trigas_conduces" model="ir.ui.view">
+        <field name="name">sale.order.form.trigas.conduces</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet//group" position="after">
+                <group string="Flujo de conduces">
+                    <field name="has_trigas_cylinders" readonly="1"/>
+                    <field name="trigas_flow_state" readonly="1"/>
+                    <field name="trigas_conduce_count" readonly="1"/>
+                    <field name="trigas_customer_location_id" readonly="1"/>
+                    <field name="trigas_customer_location_barcode" readonly="1"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

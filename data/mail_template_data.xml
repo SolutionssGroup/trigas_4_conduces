@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="mail_template_trigas_delivery_signature" model="mail.template">
+        <field name="name">Trigas - Firma de entrega Conduce 2</field>
+        <field name="model_id" ref="stock.model_stock_picking"/>
+        <field name="subject">Firma de entrega - ${object.name}</field>
+        <field name="email_to">${object.partner_id.email or ''}</field>
+        <field name="body_html" type="html">
+            <div>
+                <p>Estimado/a ${object.partner_id.name or 'cliente'},</p>
+
+                <p>Compartimos la confirmación de entrega correspondiente al conduce <strong>${object.name}</strong>.</p>
+
+                <p>
+                    <strong>Firmado por:</strong>
+                    ${object.trigas_delivery_signed_by or 'N/D'}<br/>
+                    <strong>Fecha de firma:</strong>
+                    ${object.trigas_delivery_signed_on or 'N/D'}
+                </p>
+
+                <p>Firma registrada:</p>
+
+                <p>
+                    <img t-if="object.trigas_delivery_signature"
+                         t-att-src="'data:image/png;base64,%s' % object.trigas_delivery_signature.decode()"
+                         style="max-width:400px; max-height:180px; border:1px solid #ccc;"/>
+                </p>
+
+                <p>Saludos,<br/>${user.company_id.name}</p>
+            </div>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo noupdate="1">
+
+    <record id="picking_type_trigas_step_1" model="stock.picking.type">
+        <field name="name">Entrega camión</field>
+        <field name="sequence_code">TRI1</field>
+        <field name="code">internal</field>
+        <field name="sequence">31</field>
+        <field name="company_id" ref="base.main_company"/>
+        <field name="show_reserved">1</field>
+    </record>
+
+    <record id="picking_type_trigas_step_2" model="stock.picking.type">
+        <field name="name">Camión a cliente</field>
+        <field name="sequence_code">TRI2</field>
+        <field name="code">outgoing</field>
+        <field name="sequence">32</field>
+        <field name="company_id" ref="base.main_company"/>
+        <field name="show_reserved">1</field>
+    </record>
+
+</odoo>
