@@ -64,6 +64,13 @@ class StockPicking(models.Model):
         copy=False
     )
 
+    trigas_signature_record_id = fields.Many2one(
+        'trigas.delivery.signature.record',
+        string='Registro de firma',
+        copy=False,
+        readonly=True
+    )
+
     trigas_delivery_signature_status = fields.Selection([
         ('pending', 'Pendiente'),
         ('signed', 'Firmado'),
@@ -73,6 +80,48 @@ class StockPicking(models.Model):
     def _compute_trigas_delivery_signature_status(self):
         for picking in self:
             picking.trigas_delivery_signature_status = 'signed' if picking.trigas_delivery_signature else 'pending'
+
+    def _trigas_create_or_update_signature_record(self):
+        self.ensure_one()
+
+        if not self.is_trigas_conduce or self.trigas_step != '2':
+            return False
+
+        if not self.trigas_delivery_signature:
+            return False
+
+        signature_record = self.trigas_signature_record_id
+        vals = {
+            'picking_id': self.id,
+            'signed_by': self.trigas_delivery_signed_by or '',
+            'signed_on': self.trigas_delivery_signed_on or fields.Datetime.now(),
+            'signature_image': self.trigas_delivery_signature,
+            'signature_filename': self.trigas_delivery_signature_filename,
+            'state': 'signed',
+        }
+
+        if signature_record:
+            signature_record.write(vals)
+        else:
+            signature_record = self.env['trigas.delivery.signature.record'].create(vals)
+            self.trigas_signature_record_id = signature_record.id
+
+        return signature_record
+
+    def action_open_trigas_signature_record(self):
+        self.ensure_one()
+
+        if not self.trigas_signature_record_id:
+            raise UserError(_('Este conduce todavía no tiene un registro histórico de firma.'))
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Registro de firma'),
+            'res_model': 'trigas.delivery.signature.record',
+            'res_id': self.trigas_signature_record_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
     def action_open_trigas_signature_wizard(self):
         self.ensure_one()
@@ -114,6 +163,7 @@ class StockPicking(models.Model):
             'trigas_delivery_signature_filename': 'firma_conduce_%s.png' % (self.name or self.id),
         })
 
+        self._trigas_create_or_update_signature_record()
         return True
 
     def action_send_trigas_delivery_email(self):
@@ -133,6 +183,10 @@ class StockPicking(models.Model):
             raise UserError(_('No se encontró la plantilla de correo de firma de entrega.'))
 
         template.send_mail(self.id, force_send=True)
+
+        if self.trigas_signature_record_id:
+            self.trigas_signature_record_id.state = 'emailed'
+
         return True
 
     def button_validate(self):

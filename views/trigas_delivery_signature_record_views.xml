@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_trigas_delivery_signature_record_tree" model="ir.ui.view">
+        <field name="name">trigas.delivery.signature.record.tree</field>
+        <field name="model">trigas.delivery.signature.record</field>
+        <field name="arch" type="xml">
+            <tree string="Firmas de entrega Trigas">
+                <field name="name"/>
+                <field name="picking_id"/>
+                <field name="sale_order_id"/>
+                <field name="partner_id"/>
+                <field name="signed_by"/>
+                <field name="signed_on"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_trigas_delivery_signature_record_form" model="ir.ui.view">
+        <field name="name">trigas.delivery.signature.record.form</field>
+        <field name="model">trigas.delivery.signature.record</field>
+        <field name="arch" type="xml">
+            <form string="Firma de entrega Trigas">
+                <header>
+                    <button name="action_generate_pdf_attachment" string="Generar PDF" type="object" class="oe_highlight"/>
+                    <button name="action_download_pdf" string="Descargar PDF" type="object"/>
+                    <button name="action_open_related_picking" string="Ver conduce" type="object"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name" readonly="1"/>
+                            <field name="picking_id" readonly="1"/>
+                            <field name="sale_order_id" readonly="1"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="customer_location_id" readonly="1"/>
+                            <field name="customer_location_barcode" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="signed_by" readonly="1"/>
+                            <field name="signed_on" readonly="1"/>
+                            <field name="signature_filename" readonly="1"/>
+                            <field name="pdf_attachment_id" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Firma">
+                        <field name="signature_image" widget="image" class="oe_avatar" readonly="1"/>
+                    </group>
+
+                    <group string="Notas">
+                        <field name="notes"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_trigas_delivery_signature_record" model="ir.actions.act_window">
+        <field name="name">Firmas de entrega</field>
+        <field name="res_model">trigas.delivery.signature.record</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_trigas_delivery_signature_root"
+              name="Trigas"
+              parent="stock.menu_stock_root"
+              sequence="80"/>
+
+    <menuitem id="menu_trigas_delivery_signature_record"
+              name="Firmas de entrega"
+              parent="menu_trigas_delivery_signature_root"
+              action="action_trigas_delivery_signature_record"
+              sequence="10"/>
+</odoo>

@@ -1,7 +1,11 @@
+from base64 import b64encode
 from collections import defaultdict
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+
+from reportlab.graphics.barcode import createBarcodeDrawing
+from reportlab.lib.units import mm
 
 
 class SaleOrder(models.Model):
@@ -56,6 +60,11 @@ class SaleOrder(models.Model):
         readonly=True
     )
 
+    trigas_expected_return_date = fields.Datetime(
+        string='Retorno esperado',
+        copy=False
+    )
+
     trigas_picking_1_id = fields.Many2one(
         'stock.picking',
         string='Conduce 1',
@@ -106,6 +115,49 @@ class SaleOrder(models.Model):
             raise UserError(_('No se pudo generar la ubicación Trigas del cliente.'))
 
         return partner.trigas_customer_location_id
+
+    def _trigas_format_report_datetime(self, value):
+        if not value:
+            return ''
+        return fields.Datetime.context_timestamp(self, value).strftime('%d/%m/%Y %I:%M %p')
+
+    def _get_trigas_customer_location_barcode_png(self):
+        self.ensure_one()
+
+        barcode_value = self.trigas_customer_location_barcode
+        if not barcode_value:
+            return ''
+
+        drawing = createBarcodeDrawing(
+            'Code128',
+            value=barcode_value,
+            barHeight=18 * mm,
+            humanReadable=True,
+            width=110 * mm,
+        )
+        png_data = drawing.asString('png')
+        return b64encode(png_data).decode()
+
+    def _get_trigas_report_lines(self):
+        self.ensure_one()
+
+        lots_by_product = defaultdict(list)
+        for lot in self.trigas_flow_lot_ids.sorted(lambda l: (l.product_id.id, l.name or '')):
+            lots_by_product[lot.product_id.id].append(lot.name or '')
+
+        lines = []
+        for line in self._get_trigas_cylinder_lines():
+            product_serials = lots_by_product.get(line.product_id.id, [])
+            lines.append({
+                'description': line.name or line.product_id.display_name,
+                'pickup_date': self._trigas_format_report_datetime(self.date_order),
+                'expected_return_date': self._trigas_format_report_datetime(self.trigas_expected_return_date),
+                'qty_dispatched': line.product_uom_qty,
+                'qty_returned': 0.0,
+                'serial_numbers': ', '.join(product_serials),
+            })
+
+        return lines
 
     def action_confirm(self):
         res = super().action_confirm()

@@ -13,13 +13,17 @@
         'mail',
     ],
     'data': [
+        'security/ir.model.access.csv',
         'data/stock_picking_type_data.xml',
         'data/mail_template_data.xml',
         'views/product_views.xml',
         'views/res_partner_views.xml',
         'views/sale_order_views.xml',
         'views/stock_picking_views.xml',
+        'views/trigas_delivery_signature_record_views.xml',
         'wizard/trigas_delivery_signature_wizard_view.xml',
+        'reports/trigas_conduce_cliente_report.xml',
+        'reports/trigas_delivery_signature_record_report.xml',
     ],
     'assets': {
         'web.assets_backend': [

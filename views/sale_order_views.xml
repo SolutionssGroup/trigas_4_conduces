@@ -12,6 +12,7 @@
                     <field name="trigas_conduce_count" readonly="1"/>
                     <field name="trigas_customer_location_id" readonly="1"/>
                     <field name="trigas_customer_location_barcode" readonly="1"/>
+                    <field name="trigas_expected_return_date"/>
                 </group>
             </xpath>
         </field>
