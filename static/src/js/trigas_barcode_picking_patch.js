@@ -14,6 +14,151 @@ const originalLoadData = BarcodePickingModel.prototype._loadData;
 const originalLoad = BarcodePickingModel.prototype.load;
 const originalRefresh = BarcodePickingModel.prototype.refresh;
 
+// Limpieza global del botón de firma Trigas.
+// Odoo Barcode cambia de pantalla sin recargar la página completa,
+// por eso el botón flotante puede quedarse pegado si no se elimina manualmente.
+function trigasRemoveFloatingSignatureElements() {
+    const buttonWrapper = document.getElementById('trigas_barcode_signature_button_wrapper');
+    const modalWrapper = document.getElementById('trigas_signature_modal_wrapper');
+
+    if (buttonWrapper) {
+        buttonWrapper.remove();
+    }
+
+    if (modalWrapper) {
+        modalWrapper.remove();
+    }
+}
+
+function trigasIsBarcodeListScreen() {
+    const bodyText = (document.body && document.body.innerText) ? document.body.innerText : '';
+
+    return Boolean(
+        bodyText.includes('NUEVO') &&
+        (
+            bodyText.includes('Orden:') ||
+            bodyText.includes('Conduce:') ||
+            bodyText.includes('A PROCESAR') ||
+            bodyText.includes('Camión a cliente') ||
+            bodyText.includes('Entrega camión')
+        )
+    );
+}
+
+function trigasStartSignatureButtonWatchdog() {
+    if (window.__trigasSignatureButtonWatchdogStarted) {
+        return;
+    }
+
+    window.__trigasSignatureButtonWatchdogStarted = true;
+
+    setInterval(() => {
+        if (trigasIsBarcodeListScreen()) {
+            trigasRemoveFloatingSignatureElements();
+        }
+    }, 500);
+}
+
+trigasStartSignatureButtonWatchdog();
+
+function trigasCleanBarcodeDataSafe(barcodeData) {
+    if (!barcodeData) {
+        return;
+    }
+    delete barcodeData.product;
+    delete barcodeData.lot;
+    delete barcodeData.lotName;
+    delete barcodeData.package;
+    delete barcodeData.packageType;
+    delete barcodeData.packageName;
+    delete barcodeData.packaging;
+    delete barcodeData.quantity;
+    delete barcodeData.weight;
+}
+
+function trigasGetLocationDisplayNameSafe(location) {
+    return (
+        location?.display_name ||
+        location?.name ||
+        location?.complete_name ||
+        'Ubicación'
+    );
+}
+
+function trigasGetErrorMessageSafe(error, fallbackMessage) {
+    return (
+        error?.data?.message ||
+        error?.data?.arguments?.[0] ||
+        error?.message ||
+        fallbackMessage
+    );
+}
+
+function trigasIsInternalLocationSafe(location) {
+    return !!(location && location.usage === 'internal');
+}
+
+function trigasGetScannedLocationSafe(barcodeData) {
+    if (!barcodeData) {
+        return false;
+    }
+    return barcodeData.destLocation || barcodeData.location || false;
+}
+
+function trigasGetStepFromRecordSafe(model) {
+    const record = model?.record || {};
+
+    if (record.trigas_step === '1') {
+        return '1';
+    }
+
+    if (record.trigas_step === '2') {
+        return '2';
+    }
+
+    const note = (record.note || '').toString();
+    const origin = (record.origin || '').toString();
+
+    if (note.includes('Flujo Trigas paso 1') || origin.includes('Conduce 1')) {
+        return '1';
+    }
+
+    if (note.includes('Flujo Trigas paso 2') || origin.includes('Conduce 2')) {
+        return '2';
+    }
+
+    return false;
+}
+
+// Fallback global Trigas:
+// Evita error si alguna instancia del Barcode no recibe el método desde patch().
+if (!BarcodePickingModel.prototype._trigasGetStepFromRecord) {
+    BarcodePickingModel.prototype._trigasGetStepFromRecord = function () {
+        const record = this.record || {};
+
+        if (record.trigas_step === '1') {
+            return '1';
+        }
+
+        if (record.trigas_step === '2') {
+            return '2';
+        }
+
+        const note = (record.note || '').toString();
+        const origin = (record.origin || '').toString();
+
+        if (note.includes('Flujo Trigas paso 1') || origin.includes('Conduce 1')) {
+            return '1';
+        }
+
+        if (note.includes('Flujo Trigas paso 2') || origin.includes('Conduce 2')) {
+            return '2';
+        }
+
+        return false;
+    };
+}
+
 patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
     async _loadData(...args) {
@@ -36,436 +181,336 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
     _trigasAfterBarcodeUiUpdate() {
         window.__trigasBarcodePickingModel = this;
-        this._trigasEnsureGlobalPdaButtonWatcher();
-        setTimeout(() => {
-            this._trigasSyncPdaSignatureButton();
-        }, 0);
+
+        // Si el usuario volvió al listado o cambió de pantalla,
+        // eliminar inmediatamente cualquier botón flotante que haya quedado.
+        if (typeof this._trigasIsInsideBarcodePickingDetail === 'function' && !this._trigasIsInsideBarcodePickingDetail()) {
+            this._trigasRemoveSignatureButton();
+            this._trigasRemoveSignatureModal();
+            return;
+        }
+
+        this._trigasScheduleSignatureButtonUpdate();
     },
 
-    _trigasGetStepFromRecord() {
-        const record = this.record || {};
-        const note = (record.note || '').toString();
-        const origin = (record.origin || '').toString();
+    _trigasGetActionService() {
+        return (
+            this.action ||
+            this.actionService ||
+            this.env?.services?.action ||
+            false
+        );
+    },
 
-        if (note.includes('Flujo Trigas paso 1') || origin.includes('Conduce 1')) {
-            return '1';
+    _trigasRemoveSignatureButton() {
+        const existing = document.getElementById('trigas_barcode_signature_button_wrapper');
+        if (existing) {
+            existing.remove();
         }
-        if (note.includes('Flujo Trigas paso 2') || origin.includes('Conduce 2')) {
-            return '2';
+    },
+
+    _trigasScheduleSignatureButtonUpdate() {
+        if (this.__trigasSignatureButtonTimer) {
+            clearTimeout(this.__trigasSignatureButtonTimer);
         }
+
+        this.__trigasSignatureButtonTimer = setTimeout(() => {
+            this._trigasRefreshSignatureButton();
+        }, 250);
+    },
+
+    _trigasFrontendHasDoneLines() {
+        const bodyText = (document.body && document.body.innerText) ? document.body.innerText : '';
+
+        // Detecta líneas visuales como 3 / 3, 2 / 2, 1 / 1 en la PDA.
+        const matches = bodyText.match(/(\d+)\s*\/\s*(\d+)/g) || [];
+        for (const match of matches) {
+            const parts = match.split('/').map((p) => Number(p.trim()));
+            if (parts.length === 2 && parts[0] > 0 && parts[0] === parts[1]) {
+                return true;
+            }
+        }
+
+        if (this.currentState && Array.isArray(this.currentState.lines)) {
+            for (const line of this.currentState.lines) {
+                const qtyDone = Number(
+                    line.qty_done ||
+                    line.qtyDone ||
+                    line.quantity ||
+                    line.qty ||
+                    line.done_qty ||
+                    line.doneQuantity ||
+                    0
+                );
+
+                if (qtyDone > 0) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     },
 
-    _trigasIsTruckFlow() {
-        return this._trigasGetStepFromRecord() === '1';
-    },
-
-    _trigasIsCustomerFlow() {
-        return this._trigasGetStepFromRecord() === '2';
-    },
-
-    _trigasIsNativeInternalTransfer() {
-        const record = this.record || {};
-        const pickingTypeCode =
-            record.picking_type_code ||
-            record.picking_type_id?.code ||
-            false;
-
-        return !record.is_trigas_conduce && pickingTypeCode === 'internal';
-    },
-
-    _trigasIsCurrentBarcodePickingDom() {
-        const candidates = Array.from(document.querySelectorAll('button, .btn, span, div'));
-        return candidates.some(el => {
-            const text = (el.innerText || el.textContent || '').trim().toUpperCase();
-            return text === 'VALIDAR';
-        });
-    },
-
-    _trigasShouldShowPdaSignatureButton() {
-        return this._trigasIsCustomerFlow() && this._trigasIsCurrentBarcodePickingDom();
-    },
-
-    _trigasRemovePdaSignatureButton() {
-        const existingButton = document.getElementById('trigas-pda-signature-btn');
-        if (existingButton) {
-            existingButton.remove();
+    _trigasRemoveSignatureModal() {
+        const existing = document.getElementById('trigas_signature_modal_wrapper');
+        if (existing) {
+            existing.remove();
         }
     },
 
-    _trigasRemovePdaSignatureModal() {
-        const existingModal = document.getElementById('trigas-pda-signature-modal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-    },
+    _trigasOpenSignatureModal() {
+        this._trigasRemoveSignatureModal();
 
-    _trigasEnsureGlobalPdaButtonWatcher() {
-        if (window.__trigasPdaButtonWatcherStarted) {
-            return;
-        }
+        const wrapper = document.createElement('div');
+        wrapper.id = 'trigas_signature_modal_wrapper';
+        wrapper.style.position = 'fixed';
+        wrapper.style.left = '0';
+        wrapper.style.right = '0';
+        wrapper.style.top = '0';
+        wrapper.style.bottom = '0';
+        wrapper.style.zIndex = '100000';
+        wrapper.style.background = 'rgba(0,0,0,0.45)';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+        wrapper.style.padding = '12px';
 
-        window.__trigasPdaButtonWatcherStarted = true;
+        const modal = document.createElement('div');
+        modal.style.background = '#fff';
+        modal.style.borderRadius = '10px';
+        modal.style.width = '100%';
+        modal.style.maxWidth = '420px';
+        modal.style.padding = '14px';
+        modal.style.boxShadow = '0 8px 30px rgba(0,0,0,0.35)';
 
-        window.setInterval(() => {
-            const model = window.__trigasBarcodePickingModel;
-            const shouldShow = !!(
-                model &&
-                typeof model._trigasShouldShowPdaSignatureButton === 'function' &&
-                model._trigasShouldShowPdaSignatureButton()
-            );
+        const title = document.createElement('div');
+        title.textContent = _t('Firma de entrega');
+        title.style.fontWeight = '800';
+        title.style.fontSize = '16px';
+        title.style.marginBottom = '10px';
 
-            if (!shouldShow) {
-                const button = document.getElementById('trigas-pda-signature-btn');
-                if (button) {
-                    button.remove();
-                }
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = _t('Nombre de quien recibe');
+        input.value = this.record?.partner_id?.display_name || this.record?.partner_id?.name || '';
+        input.style.width = '100%';
+        input.style.padding = '9px';
+        input.style.marginBottom = '10px';
+        input.style.border = '1px solid #ccc';
+        input.style.borderRadius = '6px';
 
-                const modal = document.getElementById('trigas-pda-signature-modal');
-                if (modal) {
-                    modal.remove();
-                }
-            }
-        }, 500);
-    },
-
-    _trigasSyncPdaSignatureButton() {
-        if (!this._trigasShouldShowPdaSignatureButton()) {
-            this._trigasRemovePdaSignatureButton();
-            this._trigasRemovePdaSignatureModal();
-            return;
-        }
-
-        let button = document.getElementById('trigas-pda-signature-btn');
-        if (!button) {
-            button = document.createElement('button');
-            button.id = 'trigas-pda-signature-btn';
-            button.type = 'button';
-            button.innerText = _t('Firmar');
-
-            Object.assign(button.style, {
-                position: 'fixed',
-                right: '16px',
-                bottom: '72px',
-                zIndex: '9999',
-                background: '#00a09d',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '12px 16px',
-                fontSize: '14px',
-                fontWeight: '600',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                cursor: 'pointer',
-            });
-
-            button.addEventListener('click', async (ev) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                const model = window.__trigasBarcodePickingModel;
-                if (model) {
-                    await model._trigasOpenPdaSignatureModal();
-                }
-            });
-
-            document.body.appendChild(button);
-        }
-    },
-
-    _trigasGetPartnerDisplayName() {
-        const partner = this.record?.partner_id;
-        if (!partner) {
-            return '';
-        }
-        return partner.display_name || partner.name || '';
-    },
-
-    async _trigasOpenPdaSignatureModal() {
-        if (!this._trigasShouldShowPdaSignatureButton()) {
-            return;
-        }
-
-        this._trigasRemovePdaSignatureModal();
-
-        const overlay = document.createElement('div');
-        overlay.id = 'trigas-pda-signature-modal';
-
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            inset: '0',
-            background: 'rgba(0, 0, 0, 0.55)',
-            zIndex: '10000',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-        });
-
-        const defaultName =
-            this.record?.trigas_delivery_signed_by ||
-            this._trigasGetPartnerDisplayName() ||
-            '';
-
-        overlay.innerHTML = `
-            <div style="
-                background: #fff;
-                width: 100%;
-                max-width: 520px;
-                border-radius: 14px;
-                padding: 16px;
-                box-sizing: border-box;
-            ">
-                <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">
-                    ${_t('Firma de entrega')}
-                </div>
-
-                <div style="margin-bottom: 10px;">
-                    <label style="display:block; font-size:13px; margin-bottom:4px;">
-                        ${_t('Nombre de quien recibe')}
-                    </label>
-                    <input id="trigas-signature-signed-by" type="text" value="${defaultName.replace(/"/g, '&quot;')}"
-                        style="
-                            width:100%;
-                            box-sizing:border-box;
-                            padding:10px;
-                            border:1px solid #ccc;
-                            border-radius:8px;
-                            font-size:14px;
-                        "/>
-                </div>
-
-                <div style="margin-bottom: 8px; font-size:13px;">
-                    ${_t('Firma')}
-                </div>
-
-                <div style="
-                    border:1px solid #ccc;
-                    border-radius:10px;
-                    overflow:hidden;
-                    background:#fff;
-                    touch-action:none;
-                ">
-                    <canvas id="trigas-signature-canvas"
-                        style="display:block; width:100%; height:220px; touch-action:none;"></canvas>
-                </div>
-
-                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-                    <button id="trigas-signature-clear" type="button"
-                        style="padding:10px 12px; border:none; border-radius:8px; background:#e5e7eb;">
-                        ${_t('Limpiar')}
-                    </button>
-
-                    <button id="trigas-signature-save" type="button"
-                        style="padding:10px 12px; border:none; border-radius:8px; background:#00a09d; color:#fff;">
-                        ${_t('Guardar firma')}
-                    </button>
-
-                    <button id="trigas-signature-save-send" type="button"
-                        style="padding:10px 12px; border:none; border-radius:8px; background:#2563eb; color:#fff;">
-                        ${_t('Guardar y enviar')}
-                    </button>
-
-                    <button id="trigas-signature-cancel" type="button"
-                        style="padding:10px 12px; border:none; border-radius:8px; background:#ef4444; color:#fff; margin-left:auto;">
-                        ${_t('Cancelar')}
-                    </button>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(overlay);
-
-        const canvas = overlay.querySelector('#trigas-signature-canvas');
-        const input = overlay.querySelector('#trigas-signature-signed-by');
-        const clearButton = overlay.querySelector('#trigas-signature-clear');
-        const saveButton = overlay.querySelector('#trigas-signature-save');
-        const saveSendButton = overlay.querySelector('#trigas-signature-save-send');
-        const cancelButton = overlay.querySelector('#trigas-signature-cancel');
+        const canvas = document.createElement('canvas');
+        canvas.width = 360;
+        canvas.height = 170;
+        canvas.style.width = '100%';
+        canvas.style.height = '170px';
+        canvas.style.border = '1px solid #999';
+        canvas.style.borderRadius = '6px';
+        canvas.style.background = '#fff';
+        canvas.style.touchAction = 'none';
 
         const ctx = canvas.getContext('2d');
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#000';
+
         let drawing = false;
-        let hasSignature = false;
+        let hasDrawn = false;
 
-        const configureCanvas = () => {
+        const getPos = (event) => {
             const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = 220;
-            ctx.lineWidth = 2.2;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#111827';
-        };
-
-        configureCanvas();
-        setTimeout(configureCanvas, 50);
-
-        const getPoint = (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const source =
-                event.touches?.[0] ||
-                event.changedTouches?.[0] ||
-                event;
+            const point = event.touches ? event.touches[0] : event;
             return {
-                x: source.clientX - rect.left,
-                y: source.clientY - rect.top,
+                x: (point.clientX - rect.left) * (canvas.width / rect.width),
+                y: (point.clientY - rect.top) * (canvas.height / rect.height),
             };
         };
 
-        const startDrawing = (event) => {
+        const start = (event) => {
             event.preventDefault();
-            const point = getPoint(event);
             drawing = true;
-            hasSignature = true;
+            hasDrawn = true;
+            const pos = getPos(event);
             ctx.beginPath();
-            ctx.moveTo(point.x, point.y);
+            ctx.moveTo(pos.x, pos.y);
         };
 
-        const draw = (event) => {
+        const move = (event) => {
             if (!drawing) {
                 return;
             }
             event.preventDefault();
-            const point = getPoint(event);
-            ctx.lineTo(point.x, point.y);
+            const pos = getPos(event);
+            ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
         };
 
-        const stopDrawing = (event) => {
-            if (!drawing) {
-                return;
+        const end = (event) => {
+            if (event) {
+                event.preventDefault();
             }
-            event.preventDefault();
             drawing = false;
-            ctx.closePath();
         };
 
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseleave', stopDrawing);
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        canvas.addEventListener('mouseup', end);
+        canvas.addEventListener('mouseleave', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', end, { passive: false });
 
-        canvas.addEventListener('touchstart', startDrawing, { passive: false });
-        canvas.addEventListener('touchmove', draw, { passive: false });
-        canvas.addEventListener('touchend', stopDrawing, { passive: false });
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '8px';
+        buttons.style.marginTop = '12px';
 
-        clearButton.addEventListener('click', () => {
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.textContent = _t('Limpiar');
+        clearBtn.className = 'btn btn-secondary';
+        clearBtn.style.flex = '1';
+        clearBtn.onclick = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            hasSignature = false;
-        });
+            hasDrawn = false;
+        };
 
-        cancelButton.addEventListener('click', () => {
-            overlay.remove();
-        });
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = _t('Cancelar');
+        cancelBtn.className = 'btn btn-light';
+        cancelBtn.style.flex = '1';
+        cancelBtn.onclick = () => {
+            this._trigasRemoveSignatureModal();
+        };
 
-        const saveSignature = async (sendEmail = false) => {
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.textContent = _t('Guardar firma');
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.style.flex = '1.4';
+        saveBtn.onclick = async () => {
             const signedBy = (input.value || '').trim();
 
             if (!signedBy) {
-                this.notification.add(
-                    _t('Debes indicar el nombre de quien recibe.'),
-                    { type: 'danger' }
-                );
+                this.notification.add(_t('Debes indicar el nombre de quien recibe.'), { type: 'danger' });
                 return;
             }
 
-            if (!hasSignature) {
-                this.notification.add(
-                    _t('Debes capturar la firma antes de guardar.'),
-                    { type: 'danger' }
-                );
+            if (!hasDrawn) {
+                this.notification.add(_t('Debes realizar la firma antes de guardar.'), { type: 'danger' });
                 return;
             }
-
-            const dataUrl = canvas.toDataURL('image/png');
-            const base64Data = dataUrl.split(',')[1];
 
             try {
+                const signatureBase64 = canvas.toDataURL('image/png');
                 await this.orm.call(
                     'stock.picking',
                     'trigas_barcode_save_delivery_signature',
-                    [[this.params.id], signedBy, base64Data]
+                    [[this.params.id], signedBy, signatureBase64]
                 );
 
-                if (sendEmail) {
-                    await this.orm.call(
-                        'stock.picking',
-                        'action_send_trigas_delivery_email',
-                        [[this.params.id]]
-                    );
-                }
-
-                overlay.remove();
+                this.notification.add(_t('Firma registrada correctamente.'), { type: 'success' });
+                this._trigasRemoveSignatureModal();
+                this._trigasRemoveSignatureButton();
                 await this._trigasReloadPickingState();
-
-                this.notification.add(
-                    sendEmail
-                        ? _t('Firma guardada y enviada al cliente.')
-                        : _t('Firma guardada correctamente.'),
-                    { type: 'success' }
-                );
             } catch (error) {
                 this.notification.add(
-                    this._trigasGetErrorMessage(
-                        error,
-                        sendEmail
-                            ? _t('No se pudo guardar y enviar la firma.')
-                            : _t('No se pudo guardar la firma.')
-                    ),
+                    trigasGetErrorMessageSafe(error, _t('No se pudo guardar la firma.')),
                     { type: 'danger' }
                 );
             }
         };
 
-        saveButton.addEventListener('click', async () => {
-            await saveSignature(false);
-        });
+        buttons.appendChild(clearBtn);
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(saveBtn);
 
-        saveSendButton.addEventListener('click', async () => {
-            await saveSignature(true);
-        });
+        modal.appendChild(title);
+        modal.appendChild(input);
+        modal.appendChild(canvas);
+        modal.appendChild(buttons);
+        wrapper.appendChild(modal);
+        document.body.appendChild(wrapper);
     },
 
-    _trigasIsInternalLocation(location) {
-        return !!(location && location.usage === 'internal');
-    },
-
-    _trigasGetScannedLocation(barcodeData) {
-        if (!barcodeData) {
-            return false;
-        }
-        return barcodeData.destLocation || barcodeData.location || false;
-    },
-
-    _trigasCleanBarcodeData(barcodeData) {
-        if (!barcodeData) {
+    async _trigasRefreshSignatureButton() {
+        if (!this.params || !this.params.id) {
+            this._trigasRemoveSignatureButton();
             return;
         }
-        delete barcodeData.product;
-        delete barcodeData.lot;
-        delete barcodeData.lotName;
-        delete barcodeData.package;
-        delete barcodeData.packageType;
-        delete barcodeData.packageName;
-        delete barcodeData.packaging;
-        delete barcodeData.quantity;
-        delete barcodeData.weight;
-    },
 
-    _trigasGetLocationDisplayName(location) {
-        return (
-            location?.display_name ||
-            location?.name ||
-            location?.complete_name ||
-            _t('Ubicación')
-        );
-    },
+        let info = false;
 
-    _trigasGetErrorMessage(error, fallbackMessage) {
-        return (
-            error?.data?.message ||
-            error?.data?.arguments?.[0] ||
-            error?.message ||
-            fallbackMessage
-        );
+        try {
+            info = await this.orm.call(
+                'stock.picking',
+                'trigas_barcode_get_signature_info',
+                [[this.params.id]]
+            );
+        } catch (error) {
+            this._trigasRemoveSignatureButton();
+            return;
+        }
+
+        if (!info || !info.is_step_2) {
+            this._trigasRemoveSignatureButton();
+            return;
+        }
+
+        const frontendDone = this._trigasFrontendHasDoneLines();
+        const readyToShow = Boolean(info.customer_location_ready && (info.has_done_cylinders || frontendDone));
+
+        if (!readyToShow && !info.signed) {
+            this._trigasRemoveSignatureButton();
+            return;
+        }
+
+        let wrapper = document.getElementById('trigas_barcode_signature_button_wrapper');
+
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.id = 'trigas_barcode_signature_button_wrapper';
+            wrapper.style.position = 'fixed';
+            wrapper.style.left = '24px';
+            wrapper.style.right = '24px';
+            wrapper.style.bottom = '82px';
+            wrapper.style.zIndex = '99999';
+            wrapper.style.display = 'flex';
+            wrapper.style.justifyContent = 'center';
+            wrapper.style.pointerEvents = 'none';
+
+            const button = document.createElement('button');
+            button.id = 'trigas_barcode_signature_button';
+            button.type = 'button';
+            button.className = 'btn btn-primary';
+            button.style.width = '70%';
+            button.style.maxWidth = '260px';
+            button.style.padding = '7px 10px';
+            button.style.fontWeight = '700';
+            button.style.fontSize = '12px';
+            button.style.borderRadius = '6px';
+            button.style.pointerEvents = 'auto';
+
+            wrapper.appendChild(button);
+            document.body.appendChild(wrapper);
+        }
+
+        const button = document.getElementById('trigas_barcode_signature_button');
+
+        if (info.signed) {
+            this._trigasRemoveSignatureButton();
+            return;
+        }
+
+        button.textContent = _t('Firmar entrega');
+        button.disabled = false;
+        button.className = 'btn btn-primary';
+
+        button.onclick = () => {
+            this._trigasOpenSignatureModal();
+        };
     },
 
     async _trigasReloadPickingState() {
@@ -483,8 +528,29 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
     },
 
+    async _trigasApplySourceDisplayOverride(location) {
+        const displayName = trigasGetLocationDisplayNameSafe(location);
+
+        await this._trigasReloadPickingState();
+
+        if (this.currentState && Array.isArray(this.currentState.lines)) {
+            for (const line of this.currentState.lines) {
+                line.trigas_override_source_display_name = displayName;
+
+                if (line.location_id) {
+                    line.location_id.display_name = displayName;
+                    line.location_id.name = displayName;
+                    line.location_id.complete_name = displayName;
+                }
+            }
+        }
+
+        this.trigger('update');
+        this._trigasAfterBarcodeUiUpdate();
+    },
+
     async _trigasApplyDisplayOverride(location, barcodeData) {
-        const displayName = this._trigasGetLocationDisplayName(location);
+        const displayName = trigasGetLocationDisplayNameSafe(location);
 
         if (!this.lastScanned) {
             this.lastScanned = {};
@@ -493,7 +559,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         this.lastScanned.trigas_scanned_location = location;
         this.lastScanned.trigas_scanned_location_display_name = displayName;
 
-        this._trigasCleanBarcodeData(barcodeData);
+        trigasCleanBarcodeDataSafe(barcodeData);
         barcodeData.stopped = true;
 
         await this._trigasReloadPickingState();
@@ -527,16 +593,17 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
             );
         } catch (error) {
             this.notification.add(
-                this._trigasGetErrorMessage(
+                trigasGetErrorMessageSafe(
                     error,
                     _t('No se pudo guardar la ubicación del camión escaneada en el picking.')
                 ),
                 { type: 'danger' }
             );
-            return;
+            return false;
         }
 
         await this._trigasApplyDisplayOverride(truckLocation, barcodeData);
+        return true;
     },
 
     async _trigasRegisterCustomerLocation(customerLocation, barcodeData) {
@@ -548,19 +615,166 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
             );
         } catch (error) {
             this.notification.add(
-                this._trigasGetErrorMessage(
+                trigasGetErrorMessageSafe(
                     error,
                     _t('No se pudo guardar la ubicación del cliente escaneada en el picking.')
                 ),
                 { type: 'danger' }
             );
-            return;
+            return false;
         }
 
         await this._trigasApplyDisplayOverride(customerLocation, barcodeData);
+        return true;
     },
 
-    async _trigasRegisterNativeDestinationLocation(location, barcodeData) {
+    _trigasGetCurrentScannedLotIds(extraLotId = false) {
+        const lotIds = [];
+
+        if (this.currentState && Array.isArray(this.currentState.lines)) {
+            for (const line of this.currentState.lines) {
+                const lotId = line?.lot_id?.id || false;
+                const qtyDone = line?.qty_done || line?.qtyDone || line?.quantity || 0;
+
+                if (lotId && qtyDone > 0) {
+                    lotIds.push(lotId);
+                }
+            }
+        }
+
+        if (extraLotId) {
+            lotIds.push(extraLotId);
+        }
+
+        return [...new Set(lotIds)];
+    },
+
+    async _trigasValidateStep1Serial(lotId) {
+        try {
+            const clientLotIds = this._trigasGetCurrentScannedLotIds(lotId);
+
+            return await this.orm.call(
+                'stock.picking',
+                'trigas_barcode_validate_serial_step_1',
+                [[this.params.id], lotId, clientLotIds]
+            );
+        } catch (error) {
+            this.notification.add(
+                trigasGetErrorMessageSafe(
+                    error,
+                    _t('El serial escaneado no pertenece a esta orden.')
+                ),
+                { type: 'danger' }
+            );
+            return false;
+        }
+    },
+
+    async _trigasValidateStep2Serial(lotId) {
+        try {
+            return await this.orm.call(
+                'stock.picking',
+                'trigas_barcode_validate_serial_step_2',
+                [[this.params.id], lotId]
+            );
+        } catch (error) {
+            this.notification.add(
+                trigasGetErrorMessageSafe(
+                    error,
+                    _t('El serial escaneado no es válido para este conduce.')
+                ),
+                { type: 'danger' }
+            );
+            return false;
+        }
+    },
+
+
+    _trigasIsNativeInternalTransferCandidate() {
+        const step = trigasGetStepFromRecordSafe(this);
+
+        if (step === '1' || step === '2') {
+            return false;
+        }
+
+        const record = this.record || {};
+        const pickingTypeCode = (
+            record.picking_type_code ||
+            record.picking_type_id?.code ||
+            record.picking_type_id?.data?.code ||
+            ''
+        ).toString();
+
+        if (pickingTypeCode === 'internal') {
+            return true;
+        }
+
+        // Fallback: si no viene el código del tipo de operación,
+        // dejamos que el backend decida si aplica o no.
+        return true;
+    },
+
+    async _trigasValidateNativeInternalSerial(lotId) {
+        if (!this._trigasIsNativeInternalTransferCandidate()) {
+            return false;
+        }
+
+        try {
+            const result = await this.orm.call(
+                'stock.picking',
+                'trigas_barcode_validate_native_serial_scan',
+                [[this.params.id], lotId]
+            );
+
+            if (result && result.location_name) {
+                const sourceLocationForDisplay = {
+                    id: result.location_id,
+                    display_name: result.location_name,
+                    name: result.location_name,
+                    complete_name: result.location_name,
+                };
+
+                this.__trigasNativeSourceLocationForLines = sourceLocationForDisplay;
+
+                await this._trigasApplySourceDisplayOverride(sourceLocationForDisplay);
+
+                // Al leer el primer serial, Odoo crea la línea después de nuestra validación.
+                // Por eso re-aplicamos el origen unos milisegundos después,
+                // cuando la línea ya existe visualmente en la PDA.
+                setTimeout(async () => {
+                    if (this.__trigasNativeSourceLocationForLines) {
+                        await this._trigasApplySourceDisplayOverride(this.__trigasNativeSourceLocationForLines);
+                    }
+                }, 450);
+
+                if (result.source_was_detected && !this.__trigasNativeSourceNotified) {
+                    this.__trigasNativeSourceNotified = true;
+
+                    this.notification.add(
+                        _t('Ubicación origen detectada: ') + result.location_name,
+                        { type: 'success' }
+                    );
+                }
+            }
+
+            return result;
+        } catch (error) {
+            this.notification.add(
+                trigasGetErrorMessageSafe(
+                    error,
+                    _t('El serial escaneado no pertenece a la ubicación origen de esta transferencia.')
+                ),
+                { type: 'danger' }
+            );
+            return false;
+        }
+    },
+
+    async _trigasRegisterNativeInternalDestination(location, barcodeData) {
+        if (!this._trigasIsNativeInternalTransferCandidate()) {
+            return false;
+        }
+
         try {
             const result = await this.orm.call(
                 'stock.picking',
@@ -568,183 +782,44 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
                 [[this.params.id], location.id]
             );
 
-            if (!result) {
-                return;
+            if (result && result.location_name) {
+                await this._trigasApplyDisplayOverride(location, barcodeData);
+                return result;
             }
 
-            const displayName = result.location_name || this._trigasGetLocationDisplayName(location);
-
-            if (!this.lastScanned) {
-                this.lastScanned = {};
-            }
-
-            this.lastScanned.trigas_scanned_location = location;
-            this.lastScanned.trigas_scanned_location_display_name = displayName;
-
-            this._trigasCleanBarcodeData(barcodeData);
-            barcodeData.stopped = true;
-
-            await this._trigasReloadPickingState();
-
-            if (this.currentState && Array.isArray(this.currentState.lines)) {
-                for (const line of this.currentState.lines) {
-                    line.trigas_override_dest_display_name = displayName;
-                    if (line.location_dest_id) {
-                        line.location_dest_id.display_name = displayName;
-                        line.location_dest_id.name = displayName;
-                        line.location_dest_id.complete_name = displayName;
-                    }
-                }
-            }
-
-            this.notification.add(
-                _t('Ubicación destino cargada: ') + displayName,
-                { type: 'success' }
-            );
-
-            this.trigger('update');
-            this._trigasAfterBarcodeUiUpdate();
+            return false;
         } catch (error) {
             this.notification.add(
-                this._trigasGetErrorMessage(
+                trigasGetErrorMessageSafe(
                     error,
                     _t('No se pudo registrar la ubicación destino de la transferencia.')
                 ),
                 { type: 'danger' }
             );
-        }
-    },
-
-    async _trigasValidateNativeSerialScan(lotId) {
-        try {
-            return await this.orm.call(
-                'stock.picking',
-                'trigas_barcode_validate_native_serial_scan',
-                [[this.params.id], lotId]
-            );
-        } catch (error) {
-            this.notification.add(
-                this._trigasGetErrorMessage(
-                    error,
-                    _t('El serial escaneado no es válido para esta transferencia.')
-                ),
-                { type: 'danger' }
-            );
             return false;
         }
-    },
-
-    async _trigasGetNativeSerialSourceLocation(lotId) {
-        try {
-            return await this.orm.call(
-                'stock.picking',
-                'trigas_barcode_get_native_serial_source_location',
-                [[this.params.id], lotId]
-            );
-        } catch (error) {
-            this.notification.add(
-                this._trigasGetErrorMessage(
-                    error,
-                    _t('No se pudo obtener la ubicación origen del serial.')
-                ),
-                { type: 'danger' }
-            );
-            return false;
-        }
-    },
-
-    _trigasFindLineInCurrentStateByLot(lotId, lotName, productId) {
-        if (!this.currentState || !Array.isArray(this.currentState.lines)) {
-            return false;
-        }
-
-        let line = [...this.currentState.lines].reverse().find(l => l?.lot_id?.id === lotId);
-        if (line) {
-            return line;
-        }
-
-        line = [...this.currentState.lines].reverse().find(l => l?.lot_name === lotName);
-        if (line) {
-            return line;
-        }
-
-        line = [...this.currentState.lines].reverse().find(l => l?.product_id?.id === productId);
-        if (line) {
-            return line;
-        }
-
-        return false;
-    },
-
-    _trigasApplySourceNameOnLine(targetLine, sourceName) {
-        if (!targetLine || !sourceName) {
-            return;
-        }
-
-        targetLine.trigas_override_source_display_name = sourceName;
-
-        if (!targetLine.location_id) {
-            targetLine.location_id = {};
-        }
-
-        targetLine.location_id.display_name = sourceName;
-        targetLine.location_id.name = sourceName;
-        targetLine.location_id.complete_name = sourceName;
-    },
-
-    async _trigasApplyNativeSourceLocationOnCurrentLine(barcodeData, sourceInfo = false) {
-        if (!barcodeData?.lot?.id) {
-            return;
-        }
-
-        const finalSourceInfo = sourceInfo || await this._trigasGetNativeSerialSourceLocation(barcodeData.lot.id);
-        if (!finalSourceInfo) {
-            return;
-        }
-
-        await this._trigasReloadPickingState();
-
-        const targetLine = this._trigasFindLineInCurrentStateByLot(
-            barcodeData.lot.id,
-            barcodeData.lot.name,
-            barcodeData.lot.product_id?.id || barcodeData.product?.id
-        );
-
-        if (!targetLine) {
-            this.notification.add(
-                _t('No se encontró la línea del serial en el estado actual del barcode.'),
-                { type: 'warning' }
-            );
-            return;
-        }
-
-        this._trigasApplySourceNameOnLine(targetLine, finalSourceInfo.location_name);
-
-        this.trigger('update');
-        this._trigasAfterBarcodeUiUpdate();
-
-        this.notification.add(
-            _t('Ubicación origen cargada: ') + finalSourceInfo.location_name,
-            { type: 'success' }
-        );
     },
 
     async _processLocation(barcodeData) {
-        const scannedLocation = this._trigasGetScannedLocation(barcodeData);
+        const scannedLocation = trigasGetScannedLocationSafe(barcodeData);
 
-        if (this._trigasIsTruckFlow() && this._trigasIsInternalLocation(scannedLocation)) {
+        if ((trigasGetStepFromRecordSafe(this) === '1') && trigasIsInternalLocationSafe(scannedLocation)) {
             await this._trigasRegisterTruckLocation(scannedLocation, barcodeData);
-            return;
+            return false;
         }
 
-        if (this._trigasIsCustomerFlow() && this._trigasIsInternalLocation(scannedLocation)) {
+        if ((trigasGetStepFromRecordSafe(this) === '2') && trigasIsInternalLocationSafe(scannedLocation)) {
             await this._trigasRegisterCustomerLocation(scannedLocation, barcodeData);
-            return;
+            return false;
         }
 
-        if (this._trigasIsNativeInternalTransfer() && this._trigasIsInternalLocation(scannedLocation)) {
-            await this._trigasRegisterNativeDestinationLocation(scannedLocation, barcodeData);
-            return;
+        if (
+            !trigasGetStepFromRecordSafe(this)
+            && trigasIsInternalLocationSafe(scannedLocation)
+            && this._trigasIsNativeInternalTransferCandidate()
+        ) {
+            await this._trigasRegisterNativeInternalDestination(scannedLocation, barcodeData);
+            return false;
         }
 
         const result = await BarcodeModel.prototype._processLocation.call(this, barcodeData);
@@ -753,48 +828,99 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
     },
 
     async _processBarcode(barcode) {
-        const step = this._trigasGetStepFromRecord();
+        const step = trigasGetStepFromRecordSafe(this);
         let parsedBarcodeData = false;
-        let nativeSourceInfo = false;
 
         try {
             parsedBarcodeData = await this._parseBarcode(barcode);
         } catch (error) {
-            const fallbackResult = await BarcodeModel.prototype._processBarcode.call(this, barcode);
-            this._trigasAfterBarcodeUiUpdate();
-            return fallbackResult;
+            this.notification.add(
+                _t('Lectura no permitida para este conduce.'),
+                { type: 'danger' }
+            );
+            return false;
         }
 
-        if (step === '2' && parsedBarcodeData?.lot?.id) {
+        if (step === '1') {
+            if (!parsedBarcodeData?.lot?.id) {
+                const location = trigasGetScannedLocationSafe(parsedBarcodeData);
+                if (trigasIsInternalLocationSafe(location)) {
+                    await this._trigasRegisterTruckLocation(location, parsedBarcodeData);
+                } else {
+                    this.notification.add(
+                        _t('En el Conduce 1 solo puedes leer seriales válidos o la ubicación del camión.'),
+                        { type: 'danger' }
+                    );
+                }
+                return false;
+            }
+
+            const validStep1 = await this._trigasValidateStep1Serial(parsedBarcodeData.lot.id);
+            if (!validStep1) {
+                return false;
+            }
+        }
+
+        if (step === '2') {
+            if (!parsedBarcodeData?.lot?.id) {
+                const location = trigasGetScannedLocationSafe(parsedBarcodeData);
+                if (trigasIsInternalLocationSafe(location)) {
+                    await this._trigasRegisterCustomerLocation(location, parsedBarcodeData);
+                } else {
+                    this.notification.add(
+                        _t('En el Conduce 2 solo puedes leer seriales válidos o la ubicación del cliente.'),
+                        { type: 'danger' }
+                    );
+                }
+                return false;
+            }
+
+            const validStep2 = await this._trigasValidateStep2Serial(parsedBarcodeData.lot.id);
+            if (!validStep2) {
+                return false;
+            }
+        }
+        if (!step && parsedBarcodeData?.lot?.id && this._trigasIsNativeInternalTransferCandidate()) {
+            const nativeResult = await this._trigasValidateNativeInternalSerial(parsedBarcodeData.lot.id);
+            if (!nativeResult) {
+                return false;
+            }
+        }
+
+        if (!step && !parsedBarcodeData?.lot?.id) {
+            const location = trigasGetScannedLocationSafe(parsedBarcodeData);
+            if (trigasIsInternalLocationSafe(location) && this._trigasIsNativeInternalTransferCandidate()) {
+                await this._trigasRegisterNativeInternalDestination(location, parsedBarcodeData);
+                return false;
+            }
+        }
+
+        if (step === '1') {
+
             try {
                 await this.orm.call(
                     'stock.picking',
-                    'trigas_barcode_validate_serial_step_2',
-                    [[this.params.id], parsedBarcodeData.lot.id]
+                    'trigas_barcode_validate_step_1_capacity',
+                    [[this.params.id]]
                 );
+
             } catch (error) {
+
                 this.notification.add(
-                    this._trigasGetErrorMessage(
+                    trigasGetErrorMessageSafe(
                         error,
-                        _t('El serial escaneado no es válido para este conduce.')
+                        _t('Ya se alcanzó la cantidad máxima permitida para esta orden.')
                     ),
                     { type: 'danger' }
                 );
-                return;
+
+                return false;
             }
         }
-
-        if (!step && this._trigasIsNativeInternalTransfer() && parsedBarcodeData?.lot?.id) {
-            nativeSourceInfo = await this._trigasValidateNativeSerialScan(parsedBarcodeData.lot.id);
-            if (!nativeSourceInfo) {
-                return;
-            }
-        }
-
         const result = await BarcodeModel.prototype._processBarcode.call(this, barcode);
 
-        if (!step && this._trigasIsNativeInternalTransfer() && parsedBarcodeData?.lot?.id) {
-            await this._trigasApplyNativeSourceLocationOnCurrentLine(parsedBarcodeData, nativeSourceInfo);
+        if (!step && this.__trigasNativeSourceLocationForLines) {
+            await this._trigasApplySourceDisplayOverride(this.__trigasNativeSourceLocationForLines);
         }
 
         this._trigasAfterBarcodeUiUpdate();
@@ -802,39 +928,52 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
     },
 
     async _processLot(barcodeData) {
-        const step = this._trigasGetStepFromRecord();
-        let nativeSourceInfo = false;
+        const step = trigasGetStepFromRecordSafe(this);
 
-        if (step === '2' && barcodeData?.lot?.id) {
-            try {
-                await this.orm.call(
-                    'stock.picking',
-                    'trigas_barcode_validate_serial_step_2',
-                    [[this.params.id], barcodeData.lot.id]
-                );
-            } catch (error) {
-                this.notification.add(
-                    this._trigasGetErrorMessage(
-                        error,
-                        _t('El serial escaneado no es válido para este conduce.')
-                    ),
-                    { type: 'danger' }
-                );
-                return;
+        if (step === '1' && barcodeData?.lot?.id) {
+            const validStep1 = await this._trigasValidateStep1Serial(barcodeData.lot.id);
+            if (!validStep1) {
+                return false;
             }
         }
 
-        if (!step && this._trigasIsNativeInternalTransfer() && barcodeData?.lot?.id) {
-            nativeSourceInfo = await this._trigasValidateNativeSerialScan(barcodeData.lot.id);
-            if (!nativeSourceInfo) {
-                return;
+        if (step === '2' && barcodeData?.lot?.id) {
+            const validStep2 = await this._trigasValidateStep2Serial(barcodeData.lot.id);
+            if (!validStep2) {
+                return false;
+            }
+        }
+
+        if (!step && barcodeData?.lot?.id && this._trigasIsNativeInternalTransferCandidate()) {
+            const nativeResult = await this._trigasValidateNativeInternalSerial(barcodeData.lot.id);
+            if (!nativeResult) {
+                return false;
+            }
+        }
+
+        if (step === '1') {
+            try {
+                await this.orm.call(
+                    'stock.picking',
+                    'trigas_barcode_validate_step_1_capacity',
+                    [[this.params.id]]
+                );
+            } catch (error) {
+                this.notification.add(
+                    trigasGetErrorMessageSafe(
+                        error,
+                        _t('Ya se alcanzó la cantidad máxima permitida para esta orden.')
+                    ),
+                    { type: 'danger' }
+                );
+                return false;
             }
         }
 
         const result = await BarcodeModel.prototype._processLot.call(this, barcodeData);
 
-        if (!step && this._trigasIsNativeInternalTransfer() && barcodeData?.lot?.id) {
-            await this._trigasApplyNativeSourceLocationOnCurrentLine(barcodeData, nativeSourceInfo);
+        if (!step && this.__trigasNativeSourceLocationForLines) {
+            await this._trigasApplySourceDisplayOverride(this.__trigasNativeSourceLocationForLines);
         }
 
         this._trigasAfterBarcodeUiUpdate();
@@ -842,10 +981,10 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
     },
 
     async _askBeforeAddProduct(...args) {
-        const step = this._trigasGetStepFromRecord();
+        const step = trigasGetStepFromRecordSafe(this);
 
-        if (step === '2') {
-            return originalAskBeforeAddProduct.call(this, ...args);
+        if (step === '1' || step === '2') {
+            return false;
         }
 
         if (originalAskBeforeAddProduct) {
@@ -857,71 +996,85 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 });
 
 patch(GroupedLineComponent.prototype, 'trigas_4_conduces.GroupedLineComponent', {
+    get displaySourceLocation() {
+        const line = this.props.line;
+
+        if (line?.trigas_override_source_display_name) {
+            return true;
+        }
+
+        return super.displaySourceLocation;
+    },
+
+    get sourceLocationPath() {
+        const line = this.props.line;
+
+        if (line?.trigas_override_source_display_name) {
+            return '';
+        }
+
+        return super.sourceLocationPath;
+    },
+
     get displayDestinationLocation() {
         const line = this.props.line;
 
         if (line?.trigas_override_dest_display_name) {
             return true;
         }
+
         return super.displayDestinationLocation;
     },
 
     get destinationLocationPath() {
         const line = this.props.line;
+
         if (line?.trigas_override_dest_display_name) {
             return '';
         }
+
         return super.destinationLocationPath;
-    },
-
-    get displaySourceLocation() {
-        const line = this.props.line;
-        if (line?.trigas_override_source_display_name) {
-            return true;
-        }
-        return super.displaySourceLocation;
-    },
-
-    get sourceLocationPath() {
-        const line = this.props.line;
-        if (line?.trigas_override_source_display_name) {
-            return '';
-        }
-        return super.sourceLocationPath;
     },
 });
 
 patch(LineComponent.prototype, 'trigas_4_conduces.LineComponent', {
+    get displaySourceLocation() {
+        const line = this.props.line;
+
+        if (line?.trigas_override_source_display_name) {
+            return true;
+        }
+
+        return super.displaySourceLocation;
+    },
+
+    get sourceLocationPath() {
+        const line = this.props.line;
+
+        if (line?.trigas_override_source_display_name) {
+            return '';
+        }
+
+        return super.sourceLocationPath;
+    },
+
     get displayDestinationLocation() {
         const line = this.props.line;
 
         if (line?.trigas_override_dest_display_name) {
             return true;
         }
+
         return super.displayDestinationLocation;
     },
 
     get destinationLocationPath() {
         const line = this.props.line;
+
         if (line?.trigas_override_dest_display_name) {
             return '';
         }
+
         return super.destinationLocationPath;
-    },
-
-    get displaySourceLocation() {
-        const line = this.props.line;
-        if (line?.trigas_override_source_display_name) {
-            return true;
-        }
-        return super.displaySourceLocation;
-    },
-
-    get sourceLocationPath() {
-        const line = this.props.line;
-        if (line?.trigas_override_source_display_name) {
-            return '';
-        }
-        return super.sourceLocationPath;
     },
 });

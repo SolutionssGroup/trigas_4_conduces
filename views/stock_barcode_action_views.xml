@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- CONDUCE 1 -->
+    <record id="action_trigas_barcode_step_1" model="ir.actions.act_window">
+        <field name="name">Entrega camión</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="view_id" ref="stock_barcode.stock_picking_kanban"/>
+
+        <field name="domain">
+            [
+                ('is_trigas_conduce', '=', True),
+                ('trigas_step', '=', '1'),
+                ('state', 'not in', ['done', 'cancel'])
+            ]
+        </field>
+
+        <field name="context">
+            {
+                'search_default_waiting': 1
+            }
+        </field>
+    </record>
+
+    <!-- CONDUCE 2 -->
+    <record id="action_trigas_barcode_step_2" model="ir.actions.act_window">
+        <field name="name">Camión a cliente</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="view_id" ref="stock_barcode.stock_picking_kanban"/>
+
+        <field name="domain">
+            [
+                ('is_trigas_conduce', '=', True),
+                ('trigas_step', '=', '2'),
+                ('state', 'not in', ['done', 'cancel'])
+            ]
+        </field>
+
+        <field name="context">
+            {
+                'search_default_waiting': 1
+            }
+        </field>
+    </record>
+
+    <!-- Mostrar orden de venta como dato principal en la tarjeta Kanban/PDA del Barcode -->
+    <record id="view_trigas_barcode_picking_kanban_sale_order" model="ir.ui.view">
+        <field name="name">stock.picking.kanban.trigas.sale.order.barcode</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock_barcode.picking_view_kanban_inherit_barcode"/>
+        <field name="priority">200</field>
+        <field name="arch" type="xml">
+
+            <!-- Cargar campos necesarios para la tarjeta kanban -->
+            <xpath expr="//kanban" position="inside">
+                <field name="sale_order_id"/>
+                <field name="is_trigas_conduce"/>
+            </xpath>
+
+            <!-- Reemplazar el título móvil: orden grande arriba, conduce pequeño debajo -->
+            <xpath expr="//button[@name='action_open_picking_client_action']/span" position="replace">
+                <span>
+                    <t t-if="record.is_trigas_conduce.raw_value and record.sale_order_id.raw_value">
+                        <span style="font-size: 15px; font-weight: 700; display: block; line-height: 1.2;">
+                            Orden: <t t-esc="record.sale_order_id.value"/>
+                        </span>
+                        <span class="text-muted" style="font-size: 11px; display: block; line-height: 1.2;">
+                            Conduce: <t t-esc="record.name.value"/>
+                        </span>
+                    </t>
+                    <t t-else="">
+                        <t t-esc="record.name.value"/>
+                    </t>
+                </span>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

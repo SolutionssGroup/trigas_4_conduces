@@ -205,7 +205,7 @@ class SaleOrder(models.Model):
             location_dest_id=pending_out_location.id,
             sale_lines=cylinder_lines,
             step_code='1',
-            auto_assign=False,
+            auto_assign=True,
         )
 
         p2 = self._create_trigas_picking(

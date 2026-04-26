@@ -20,6 +20,7 @@
         'views/res_partner_views.xml',
         'views/sale_order_views.xml',
         'views/stock_picking_views.xml',
+        'views/stock_barcode_action_views.xml',
         'views/trigas_delivery_signature_record_views.xml',
         'wizard/trigas_delivery_signature_wizard_view.xml',
         'reports/trigas_conduce_cliente_report.xml',
