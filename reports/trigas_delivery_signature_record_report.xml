@@ -12,46 +12,128 @@
     <template id="report_trigas_delivery_signature_record_document">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="doc">
-                <div class="page" style="font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #222; padding: 24px;">
-                    <h2 style="margin-bottom: 20px;">Constancia de entrega firmada</h2>
+                <t t-set="serial_lines" t-value="doc._get_trigas_signature_serial_lines()"/>
 
-                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                <div class="page" style="font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #222; padding: 24px;">
+
+                    <div style="border-bottom: 2px solid #1f4e79; padding-bottom: 12px; margin-bottom: 18px;">
+                        <h2 style="margin: 0; color: #1f4e79; font-size: 22px;">Constancia de entrega firmada</h2>
+                        <div style="margin-top: 5px; color: #555;">Documento de confirmacion de entrega de cilindros serializados</div>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 18px;">
                         <tr>
-                            <td style="padding: 6px; width: 24%;"><strong>Conduce:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.picking_id.name"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Orden de venta:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.sale_order_id.name or ''"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Cliente:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.partner_id.name or ''"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Ubicación cliente:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.customer_location_id.display_name or ''"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Barcode ubicación:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.customer_location_barcode or ''"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Firmado por:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.signed_by or ''"/>
-                        </tr>
-                        <tr>
-                            <td style="padding: 6px;"><strong>Fecha de firma:</strong></td>
-                            <td style="padding: 6px;" t-esc="doc.signed_on or ''"/>
+                            <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                                <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+                                    <tr style="background-color: #f2f5f8;">
+                                        <td colspan="2" style="padding: 8px; font-weight: bold; color: #1f4e79;">Datos del conduce</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; width: 38%; border-top: 1px solid #eee;"><strong>Conduce:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.picking_id.name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Orden de venta:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.sale_order_id.name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Fecha de firma:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc._trigas_format_datetime(doc.signed_on)"/>
+                                    </tr>
+                                </table>
+                            </td>
+
+                            <td style="width: 50%; vertical-align: top; padding-left: 10px;">
+                                <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+                                    <tr style="background-color: #f2f5f8;">
+                                        <td colspan="2" style="padding: 8px; font-weight: bold; color: #1f4e79;">Datos del cliente</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; width: 38%; border-top: 1px solid #eee;"><strong>Cliente:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.partner_id.name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Ubicacion:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.customer_location_id.display_name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Barcode:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.customer_location_barcode or ''"/>
+                                    </tr>
+                                </table>
+                            </td>
                         </tr>
                     </table>
 
-                    <div style="margin-top: 24px;">
-                        <div style="font-weight: bold; margin-bottom: 10px;">Firma digital</div>
-                        <img t-if="doc.signature_image"
-                             t-att-src="image_data_uri(doc.signature_image)"
-                             style="max-width: 420px; max-height: 180px; border: 1px solid #ccc;"/>
+                    <div style="margin-top: 18px;">
+                        <div style="font-weight: bold; color: #1f4e79; font-size: 15px; margin-bottom: 8px;">
+                            Seriales entregados
+                        </div>
+
+                        <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+                            <thead>
+                                <tr style="background-color: #1f4e79; color: white;">
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 5%; text-align: center;">#</th>
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 31%; text-align: left;">Producto</th>
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 20%; text-align: left;">Serial</th>
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 10%; text-align: center;">Cant.</th>
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 17%; text-align: left;">Origen</th>
+                                    <th style="padding: 7px; border: 1px solid #1f4e79; width: 17%; text-align: left;">Destino</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="serial_lines" t-as="line">
+                                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;" t-esc="line['sequence']"/>
+                                    <td style="padding: 6px; border: 1px solid #ddd;" t-esc="line['product']"/>
+                                    <td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;" t-esc="line['serial']"/>
+                                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">
+                                        <span t-esc="line['qty_done']"/>
+                                        <span t-esc="line['uom']"/>
+                                    </td>
+                                    <td style="padding: 6px; border: 1px solid #ddd;" t-esc="line['source_location']"/>
+                                    <td style="padding: 6px; border: 1px solid #ddd;" t-esc="line['dest_location']"/>
+                                </tr>
+
+                                <tr t-if="not serial_lines">
+                                    <td colspan="6" style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #777;">
+                                        No hay seriales registrados para este documento de firma.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
+
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 26px;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top; padding-right: 12px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; color: #1f4e79;">Firma digital</div>
+                                <div style="height: 150px; border: 1px solid #ccc; padding: 8px;">
+                                    <img t-if="doc.signature_image"
+                                         t-att-src="image_data_uri(doc.signature_image)"
+                                         style="max-width: 100%; max-height: 130px;"/>
+                                </div>
+                            </td>
+
+                            <td style="width: 50%; vertical-align: top; padding-left: 12px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; color: #1f4e79;">Confirmacion</div>
+                                <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+                                    <tr>
+                                        <td style="padding: 8px; width: 35%; border-bottom: 1px solid #eee;"><strong>Firmado por:</strong></td>
+                                        <td style="padding: 8px; border-bottom: 1px solid #eee;" t-esc="doc.signed_by or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px;"><strong>Estado:</strong></td>
+                                        <td style="padding: 8px;" t-esc="dict(doc._fields['state'].selection).get(doc.state)"/>
+                                    </tr>
+                                </table>
+
+                                <div style="margin-top: 18px; font-size: 11px; color: #555;">
+                                    El cliente confirma la recepcion de los cilindros detallados en este documento.
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
                 </div>
             </t>
         </t>

@@ -27,7 +27,7 @@
 
     <record id="picking_type_trigas_step_2" model="stock.picking.type">
         <field name="name">Trigas - Conduce 2</field>
-        <field name="code">internal</field>
+        <field name="code">outgoing</field>
         <field name="sequence_code">TRI2</field>
         <field name="barcode_validation_full">True</field>
         <field name="show_operations">True</field>

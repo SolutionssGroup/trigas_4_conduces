@@ -73,7 +73,7 @@ class ResPartner(models.Model):
 
         new_location = location_model.create({
             'name': self._trigas_build_customer_location_name(),
-            'usage': 'internal',
+            'usage': 'customer',
             'location_id': parent_location.id,
             'barcode': barcode,
             'company_id': self.env.company.id,

@@ -377,7 +377,7 @@ class StockPicking(models.Model):
             lambda ml: (
                 ml.qty_done > 0
                 and ml.location_dest_id
-                and ml.location_dest_id.usage == 'internal'
+                and ml.location_dest_id.usage == 'customer'
                 and ml.location_dest_id.id not in pending_locations.ids
                 and ml.location_dest_id.id != self.location_id.id
             )
@@ -386,7 +386,7 @@ class StockPicking(models.Model):
 
         if (
             self.location_dest_id
-            and self.location_dest_id.usage == 'internal'
+            and self.location_dest_id.usage == 'customer'
             and self.location_dest_id.id not in pending_locations.ids
             and self.location_dest_id.id != self.location_id.id
         ):
@@ -493,8 +493,8 @@ class StockPicking(models.Model):
         if not location:
             return False
 
-        if location.usage != 'internal':
-            raise UserError(_('La ubicación escaneada del cliente debe ser de tipo interna.'))
+        if location.usage != 'customer':
+            raise UserError(_('La ubicación escaneada del cliente debe ser de tipo cliente.'))
 
         expected_location = self._trigas_get_expected_customer_location()
         if not expected_location:
@@ -634,19 +634,19 @@ class StockPicking(models.Model):
         quants = quant_model.search([
             ('lot_id', '=', lot.id),
             ('quantity', '>', 0),
-            ('location_id.usage', '=', 'internal'),
+            ('location_id.usage', 'in', ['internal', 'customer']),
         ])
 
         locations = quants.mapped('location_id').exists()
 
         if not locations:
             raise UserError(_(
-                'El serial %s no tiene existencia disponible en una ubicación interna.'
+                'El serial %s no tiene existencia disponible en una ubicación interna o de cliente.'
             ) % lot.name)
 
         if len(locations) > 1:
             raise UserError(_(
-                'El serial %s existe en múltiples ubicaciones internas. '
+                'El serial %s existe en múltiples ubicaciones internas o de cliente. '
                 'Debes definir la ubicación origen manualmente.'
             ) % lot.name)
 
@@ -881,6 +881,16 @@ class StockPicking(models.Model):
             raise UserError(_('Debes registrar los seriales en el Conduce 2 antes de validar.'))
 
         customer_location = self._trigas_resolve_customer_location()
+
+        sale_order = self.sale_order_id
+        if sale_order:
+            for move in self.move_ids_without_package:
+                if not move.sale_line_id:
+                    sale_line = sale_order.order_line.filtered(
+                        lambda line: line.product_id.id == move.product_id.id
+                    )[:1]
+                    if sale_line:
+                        move.sale_line_id = sale_line.id
 
         if not self.trigas_customer_location_scanned:
             raise UserError(_('Debes escanear la ubicación del cliente antes de validar el Conduce 2.'))

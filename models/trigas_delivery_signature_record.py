@@ -103,6 +103,64 @@ class TrigasDeliverySignatureRecord(models.Model):
             else:
                 rec.name = _('Firma Trigas')
 
+    def _trigas_format_datetime(self, value):
+        self.ensure_one()
+        if not value:
+            return ''
+        return fields.Datetime.context_timestamp(self, value).strftime('%d/%m/%Y %I:%M %p')
+
+    def _get_trigas_signature_serial_lines(self):
+        self.ensure_one()
+
+        picking = self.picking_id
+        if not picking:
+            return []
+
+        move_lines = picking.move_line_ids.filtered(
+            lambda ml: ml.lot_id
+            and ml.qty_done > 0
+            and ml.product_id
+            and ml.product_id.product_tmpl_id.is_cylinder_conduce
+        ).sorted(lambda ml: (
+            ml.product_id.display_name or '',
+            ml.lot_id.name or '',
+            ml.id,
+        ))
+
+        lines = []
+        for index, move_line in enumerate(move_lines, start=1):
+            lines.append({
+                'sequence': index,
+                'product': move_line.product_id.display_name or '',
+                'serial': move_line.lot_id.name or '',
+                'qty_done': move_line.qty_done,
+                'uom': move_line.product_uom_id.name or move_line.product_id.uom_id.name or '',
+                'source_location': move_line.location_id.display_name or '',
+                'dest_location': move_line.location_dest_id.display_name or '',
+            })
+
+        if lines:
+            return lines
+
+        if self.sale_order_id and self.sale_order_id.trigas_flow_lot_ids:
+            lots = self.sale_order_id.trigas_flow_lot_ids.sorted(lambda lot: (
+                lot.product_id.display_name or '',
+                lot.name or '',
+                lot.id,
+            ))
+            for index, lot in enumerate(lots, start=1):
+                lines.append({
+                    'sequence': index,
+                    'product': lot.product_id.display_name or '',
+                    'serial': lot.name or '',
+                    'qty_done': 1.0,
+                    'uom': lot.product_id.uom_id.name or '',
+                    'source_location': '',
+                    'dest_location': self.customer_location_id.display_name or '',
+                })
+
+        return lines
+
     def action_generate_pdf_attachment(self):
         for rec in self:
             report = self.env.ref('trigas_4_conduces.action_report_trigas_delivery_signature_record', raise_if_not_found=False)

@@ -18,147 +18,215 @@
                 <t t-set="report_lines" t-value="doc._get_trigas_report_lines()"/>
                 <t t-set="barcode_png" t-value="doc._get_trigas_customer_location_barcode_png()"/>
 
-                <div class="page" style="font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #222; padding: 12px 18px;">
-                    <div style="width: 100%; overflow: hidden; margin-bottom: 24px;">
-                        <div style="width: 48%; float: left;">
-                            <div style="margin-bottom: 8px;">
+                <div class="page" style="font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #222; padding: 22px 26px;">
+
+                    <!-- ENCABEZADO -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 18px;">
+                        <tr>
+                            <td style="width: 55%; vertical-align: top;">
                                 <img t-if="company.logo"
                                      t-att-src="image_data_uri(company.logo)"
-                                     style="max-height: 65px; max-width: 220px;"/>
-                            </div>
-                            <div style="font-size: 13px; line-height: 1.45;">
-                                <div style="font-weight: bold;" t-esc="company.name"/>
-                                <div t-if="company.partner_id.street" t-esc="company.partner_id.street"/>
-                                <div>
-                                    <t t-if="company.partner_id.city">
-                                        <span t-esc="company.partner_id.city"/>
-                                    </t>
-                                    <t t-if="company.partner_id.state_id">
-                                        <span t-if="company.partner_id.city">, </span>
-                                        <span t-esc="company.partner_id.state_id.name"/>
-                                    </t>
-                                    <t t-if="company.partner_id.country_id">
-                                        <span t-if="company.partner_id.city or company.partner_id.state_id">, </span>
-                                        <span t-esc="company.partner_id.country_id.name"/>
-                                    </t>
+                                     style="max-height: 70px; max-width: 220px; margin-bottom: 6px;"/>
+                                <div style="font-size: 13px; line-height: 1.4;">
+                                    <div style="font-weight: bold; font-size: 15px;" t-esc="company.name"/>
+                                    <div t-if="company.partner_id.street" t-esc="company.partner_id.street"/>
+                                    <div>
+                                        <t t-if="company.partner_id.city">
+                                            <span t-esc="company.partner_id.city"/>
+                                        </t>
+                                        <t t-if="company.partner_id.state_id">
+                                            <span t-if="company.partner_id.city">, </span>
+                                            <span t-esc="company.partner_id.state_id.name"/>
+                                        </t>
+                                        <t t-if="company.partner_id.country_id">
+                                            <span t-if="company.partner_id.city or company.partner_id.state_id">, </span>
+                                            <span t-esc="company.partner_id.country_id.name"/>
+                                        </t>
+                                    </div>
+                                    <div t-if="company.phone or company.email or company.vat">
+                                        <span t-if="company.phone" t-esc="company.phone"/>
+                                        <span t-if="company.phone and (company.email or company.vat)"> | </span>
+                                        <span t-if="company.email" t-esc="company.email"/>
+                                        <span t-if="company.email and company.vat"> | </span>
+                                        <span t-if="company.vat" t-esc="company.vat"/>
+                                    </div>
                                 </div>
-                                <div t-if="company.phone or company.email or company.vat">
-                                    <span t-if="company.phone" t-esc="company.phone"/>
-                                    <span t-if="company.phone and (company.email or company.vat)"> </span>
-                                    <span t-if="company.email" t-esc="company.email"/>
-                                    <span t-if="company.email and company.vat"> </span>
-                                    <span t-if="company.vat" t-esc="company.vat"/>
+                            </td>
+
+                            <td style="width: 45%; vertical-align: top; text-align: right;">
+                                <div style="font-size: 24px; font-weight: bold; color: #1f4e79; margin-bottom: 6px;">
+                                    CONDUCE CLIENTE
                                 </div>
-                            </div>
-                        </div>
+                                <div style="font-size: 15px; font-weight: bold; color: #333;">
+                                    <span t-esc="doc.name"/>
+                                </div>
+                                <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                                    Documento para identificacion y entrega al cliente
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
 
-                        <div style="width: 42%; float: right; text-align: left; font-size: 13px; line-height: 1.5; margin-top: 18px;">
-                            <div style="font-weight: bold; text-transform: uppercase;" t-esc="doc.partner_id.name"/>
-                            <div t-if="doc.partner_id.street" t-esc="doc.partner_id.street"/>
-                            <div>
-                                <t t-if="doc.partner_id.city">
-                                    <span t-esc="doc.partner_id.city"/>
-                                </t>
-                                <t t-if="doc.partner_id.state_id">
-                                    <span t-if="doc.partner_id.city"> </span>
-                                    <span t-esc="doc.partner_id.state_id.name"/>
-                                </t>
-                            </div>
-                            <div t-if="doc.partner_id.country_id" t-esc="doc.partner_id.country_id.name"/>
-                        </div>
-                    </div>
+                    <div style="border-top: 3px solid #1f4e79; margin-bottom: 16px;"></div>
 
-                    <div style="clear: both;"/>
+                    <!-- BLOQUES DE INFORMACION -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top; padding-right: 8px;">
+                                <table style="width: 100%; border-collapse: collapse; border: 1px solid #d9d9d9;">
+                                    <tr style="background-color: #f2f5f8;">
+                                        <td colspan="2" style="padding: 8px; font-weight: bold; color: #1f4e79;">
+                                            Datos del cliente
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; width: 34%; border-top: 1px solid #eee;"><strong>Cliente:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;" t-esc="doc.partner_id.name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;"><strong>Direccion:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;">
+                                            <span t-if="doc.partner_id.street" t-esc="doc.partner_id.street"/>
+                                            <span t-if="doc.partner_id.street and doc.partner_id.city">, </span>
+                                            <span t-if="doc.partner_id.city" t-esc="doc.partner_id.city"/>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;"><strong>Comercial:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;" t-esc="doc.user_id.name or ''"/>
+                                    </tr>
+                                </table>
+                            </td>
 
-                    <div style="margin: 8px 0 18px 0;">
-                        <span style="font-size: 28px; color: #4b4f8f; font-weight: 500;">
-                            Conduce Cliente # <span t-esc="doc.name"/>
-                        </span>
-                    </div>
+                            <td style="width: 50%; vertical-align: top; padding-left: 8px;">
+                                <table style="width: 100%; border-collapse: collapse; border: 1px solid #d9d9d9;">
+                                    <tr style="background-color: #f2f5f8;">
+                                        <td colspan="2" style="padding: 8px; font-weight: bold; color: #1f4e79;">
+                                            Datos del conduce
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; width: 38%; border-top: 1px solid #eee;"><strong>Orden:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;" t-esc="doc.name or ''"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;"><strong>Fecha:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;" t-esc="doc._trigas_format_report_datetime(doc.date_order)"/>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;"><strong>Retorno esperado:</strong></td>
+                                        <td style="padding: 7px; border-top: 1px solid #eee;" t-esc="doc._trigas_format_report_datetime(doc.trigas_expected_return_date)"/>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
 
-                    <div style="margin-bottom: 16px; font-size: 13px; line-height: 1.5;">
-                        <div>
-                            <span style="font-weight: bold;">Comercial:</span>
-                            <span t-esc="doc.user_id.name or ''"/>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom: 18px; border: 1px solid #cfcfcf; padding: 12px 14px;">
-                        <div style="font-weight: bold; margin-bottom: 8px;">Barcode ubicación cliente</div>
-                        <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;" t-esc="doc.trigas_customer_location_barcode or ''"/>
-                        <div t-if="barcode_png" style="margin-top: 4px;">
-                            <img t-att-src="'data:image/png;base64,%s' % barcode_png"
-                                 style="width: 420px; height: 95px; display: block;"/>
-                        </div>
-                    </div>
-
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                        <thead>
+                    <!-- CODIGO DE BARRAS -->
+                    <div style="border: 1px solid #d9d9d9; padding: 12px 14px; margin-bottom: 18px;">
+                        <table style="width: 100%; border-collapse: collapse;">
                             <tr>
-                                <th style="border-bottom: 1px solid #555; text-align: left; padding: 8px 6px;">Descripción</th>
-                                <th style="border-bottom: 1px solid #555; text-align: left; padding: 8px 6px;">Fecha de Recogida</th>
-                                <th style="border-bottom: 1px solid #555; text-align: left; padding: 8px 6px;">Retorno Esperado</th>
-                                <th style="border-bottom: 1px solid #555; text-align: center; padding: 8px 6px;">Recogida</th>
-                                <th style="border-bottom: 1px solid #555; text-align: center; padding: 8px 6px;">Devuelto</th>
-                                <th style="border-bottom: 1px solid #555; text-align: left; padding: 8px 6px;">Números de serie</th>
+                                <td style="width: 38%; vertical-align: middle;">
+                                    <div style="font-weight: bold; color: #1f4e79; font-size: 14px; margin-bottom: 5px;">
+                                        Codigo de barras del cliente
+                                    </div>
+                                    <div style="font-size: 18px; font-weight: bold; color: #222;" t-esc="doc.trigas_customer_location_barcode or ''"/>
+                                    <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                                        Escanear este codigo para identificar la ubicacion del cliente.
+                                    </div>
+                                </td>
+                                <td style="width: 62%; vertical-align: middle; text-align: center;">
+                                    <img t-if="barcode_png"
+                                         t-att-src="'data:image/png;base64,%s' % barcode_png"
+                                         style="width: 420px; height: 92px; display: inline-block;"/>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- TABLA DE PRODUCTOS -->
+                    <div style="font-weight: bold; color: #1f4e79; font-size: 15px; margin-bottom: 8px;">
+                        Detalle de cilindros
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #d9d9d9;">
+                        <thead>
+                            <tr style="background-color: #1f4e79; color: white;">
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: left; width: 24%;">Descripcion</th>
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: center; width: 15%;">Fecha recogida</th>
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: center; width: 15%;">Retorno esperado</th>
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: center; width: 10%;">Cantidad</th>
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: center; width: 10%;">Devuelto</th>
+                                <th style="padding: 8px 6px; border: 1px solid #1f4e79; text-align: left; width: 26%;">Numeros de serie</th>
                             </tr>
                         </thead>
+
                         <tbody>
                             <tr t-foreach="report_lines" t-as="line">
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; vertical-align: top;">
                                     <span t-esc="line['description']"/>
                                 </td>
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; vertical-align: top; text-align: center;">
                                     <span t-if="line['pickup_date']" t-esc="line['pickup_date']"/>
                                 </td>
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; vertical-align: top; text-align: center;">
                                     <span t-if="line['expected_return_date']" t-esc="line['expected_return_date']"/>
                                 </td>
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; text-align: center; vertical-align: top;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; text-align: center; vertical-align: top;">
                                     <span t-esc="line['qty_dispatched']"/>
                                 </td>
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; text-align: center; vertical-align: top;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; text-align: center; vertical-align: top;">
                                     <span t-esc="line['qty_returned']"/>
                                 </td>
-                                <td style="border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top; word-break: break-word;">
+                                <td style="border: 1px solid #ddd; padding: 8px 6px; vertical-align: top; word-break: break-word; font-weight: bold;">
                                     <span t-esc="line['serial_numbers']"/>
                                 </td>
                             </tr>
 
                             <tr t-if="not report_lines">
                                 <td colspan="6" style="padding: 12px 6px; text-align: center; color: #666;">
-                                    No hay líneas de cilindros para imprimir en este conduce.
+                                    No hay lineas de cilindros para imprimir en este conduce.
                                 </td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <div style="margin-top: 70px; width: 100%; overflow: hidden;">
-                        <div style="width: 42%; float: left; text-align: center;">
-                            <div style="border-top: 1px solid #666; margin: 0 auto; width: 85%;"/>
-                            <div style="margin-top: 8px; font-size: 14px;">Entregado por</div>
-                        </div>
-
-                        <div style="width: 42%; float: right; text-align: center;">
-                            <div style="border-top: 1px solid #666; margin: 0 auto; width: 85%;"/>
-                            <div style="margin-top: 8px; font-size: 14px;">Recibido por</div>
-                        </div>
+                    <!-- NOTA -->
+                    <div style="margin-top: 14px; padding: 10px 12px; border: 1px solid #e4e4e4; background-color: #fafafa; font-size: 11px; color: #555;">
+                        Este documento acompana la entrega de cilindros al cliente. Los numeros de serie listados permiten validar los cilindros entregados y facilitar la trazabilidad.
                     </div>
 
-                    <div style="clear: both;"/>
+                    <!-- FIRMAS -->
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 58px;">
+                        <tr>
+                            <td style="width: 50%; text-align: center; padding-right: 25px;">
+                                <div style="border-top: 1px solid #555; width: 85%; margin: 0 auto;"></div>
+                                <div style="margin-top: 8px; font-size: 12px; font-weight: bold;">Entregado por</div>
+                                <div style="font-size: 10px; color: #777; margin-top: 3px;">Nombre, firma y fecha</div>
+                            </td>
 
-                    <div style="position: absolute; bottom: 12px; left: 18px; right: 18px; text-align: center; font-size: 11px; color: #555;">
+                            <td style="width: 50%; text-align: center; padding-left: 25px;">
+                                <div style="border-top: 1px solid #555; width: 85%; margin: 0 auto;"></div>
+                                <div style="margin-top: 8px; font-size: 12px; font-weight: bold;">Recibido por</div>
+                                <div style="font-size: 10px; color: #777; margin-top: 3px;">Nombre, firma y fecha</div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- PIE -->
+                    <div style="position: absolute; bottom: 12px; left: 26px; right: 26px; text-align: center; font-size: 10px; color: #555;">
                         <div>
                             <span t-if="company.phone" t-esc="company.phone"/>
-                            <span t-if="company.phone and company.email"> </span>
+                            <span t-if="company.phone and company.email"> | </span>
                             <span t-if="company.email" t-esc="company.email"/>
-                            <span t-if="company.email and company.vat"> </span>
+                            <span t-if="company.email and company.vat"> | </span>
                             <span t-if="company.vat" t-esc="company.vat"/>
                         </div>
                         <div style="margin-top: 3px;">
-                            Página: <span class="page"/> de <span class="topage"/>
+                            Pagina: <span class="page"/> de <span class="topage"/>
                         </div>
                     </div>
+
                 </div>
             </t>
         </t>
