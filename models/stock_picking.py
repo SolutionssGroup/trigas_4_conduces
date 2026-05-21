@@ -32,6 +32,14 @@ class StockPicking(models.Model):
         copy=False
     )
 
+    trigas_driver_id = fields.Many2one(
+        'x_choferes',
+        string='Chofer',
+        related='sale_order_id.trigas_driver_id',
+        readonly=True,
+        store=True
+    )
+
     trigas_truck_location_id = fields.Many2one(
         'stock.location',
         string='Ubicación camión',

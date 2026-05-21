@@ -40,6 +40,10 @@
                                         <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Fecha de firma:</strong></td>
                                         <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc._trigas_format_datetime(doc.signed_on)"/>
                                     </tr>
+                                    <tr>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;"><strong>Chofer:</strong></td>
+                                        <td style="padding: 6px; border-top: 1px solid #eee;" t-esc="doc.picking_id.trigas_driver_id.display_name if doc.picking_id.trigas_driver_id else ''"/>
+                                    </tr>
                                 </table>
                             </td>
 

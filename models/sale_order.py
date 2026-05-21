@@ -11,6 +11,13 @@ from reportlab.lib.units import mm
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
+
+    trigas_driver_id = fields.Many2one(
+        'x_choferes',
+        string='Chofer',
+        copy=False
+    )
+
     has_trigas_cylinders = fields.Boolean(
         string='Tiene productos de cilindros',
         compute='_compute_has_trigas_cylinders',
