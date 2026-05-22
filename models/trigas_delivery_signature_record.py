@@ -23,6 +23,14 @@ class TrigasDeliverySignatureRecord(models.Model):
         index=True
     )
 
+    company_id = fields.Many2one(
+        'res.company',
+        string='Compañía',
+        related='picking_id.company_id',
+        store=True,
+        readonly=True
+    )
+
     sale_order_id = fields.Many2one(
         'sale.order',
         string='Orden de venta',

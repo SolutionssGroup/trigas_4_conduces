@@ -98,6 +98,10 @@ function trigasIsInternalLocationSafe(location) {
     return !!(location && location.usage === 'internal');
 }
 
+function trigasIsCustomerLocationSafe(location) {
+    return !!(location && location.usage === 'customer');
+}
+
 function trigasGetScannedLocationSafe(barcodeData) {
     if (!barcodeData) {
         return false;
@@ -808,7 +812,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
             return false;
         }
 
-        if ((trigasGetStepFromRecordSafe(this) === '2') && trigasIsInternalLocationSafe(scannedLocation)) {
+        if ((trigasGetStepFromRecordSafe(this) === '2') && trigasIsCustomerLocationSafe(scannedLocation)) {
             await this._trigasRegisterCustomerLocation(scannedLocation, barcodeData);
             return false;
         }
@@ -864,7 +868,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         if (step === '2') {
             if (!parsedBarcodeData?.lot?.id) {
                 const location = trigasGetScannedLocationSafe(parsedBarcodeData);
-                if (trigasIsInternalLocationSafe(location)) {
+                if (trigasIsCustomerLocationSafe(location)) {
                     await this._trigasRegisterCustomerLocation(location, parsedBarcodeData);
                 } else {
                     this.notification.add(

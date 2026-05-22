@@ -61,6 +61,11 @@ class StockPicking(models.Model):
         copy=False
     )
 
+    trigas_native_destination_location_scanned = fields.Boolean(
+        string='Ubicación destino nativa escaneada',
+        copy=False
+    )
+
     trigas_customer_location_scanned = fields.Boolean(
         string='Ubicación cliente escaneada',
         default=False,
@@ -752,6 +757,7 @@ class StockPicking(models.Model):
 
         self.write({
             'location_dest_id': location.id,
+            'trigas_native_destination_location_scanned': True,
         })
 
         self.move_ids_without_package.write({
@@ -782,7 +788,10 @@ class StockPicking(models.Model):
 
         destination_location = self.location_dest_id.exists()
         if not destination_location:
-            raise UserError(_('Debes escanear la ubicación destino antes de validar la transferencia.'))
+            raise UserError(_('Debes escanear la ubicación destino del camión antes de validar la transferencia.'))
+
+        if not self.trigas_native_destination_location_scanned:
+            raise UserError(_('Debes escanear la ubicación destino del camión antes de validar la transferencia.'))
 
         if destination_location.usage != 'internal':
             raise UserError(_('La ubicación destino de la transferencia debe ser de tipo interna.'))
