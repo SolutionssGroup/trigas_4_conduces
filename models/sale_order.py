@@ -13,7 +13,7 @@ class SaleOrder(models.Model):
 
 
     trigas_driver_id = fields.Many2one(
-        'x_choferes',
+        'x.choferes',
         string='Chofer',
         copy=False
     )

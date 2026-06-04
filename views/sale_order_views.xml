@@ -7,10 +7,10 @@
         <field name="arch" type="xml">
             <xpath expr="//sheet//group" position="after">
                 <group string="Flujo de conduces">
-                    <field name="has_trigas_cylinders" readonly="1"/>
                     <field name="trigas_flow_state" readonly="1"/>
                     <field name="trigas_conduce_count" readonly="1"/>
-                    <field name="trigas_customer_location_id" readonly="1"/>                    <field name="trigas_driver_id"/>
+                    <field name="trigas_customer_location_id" readonly="1"/>
+                    <field name="trigas_driver_id"/>
 
                     <field name="trigas_customer_location_barcode" readonly="1"/>
                     <field name="trigas_expected_return_date"/>

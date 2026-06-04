@@ -33,7 +33,7 @@ class StockPicking(models.Model):
     )
 
     trigas_driver_id = fields.Many2one(
-        'x_choferes',
+        'x.choferes',
         string='Chofer',
         related='sale_order_id.trigas_driver_id',
         readonly=True,

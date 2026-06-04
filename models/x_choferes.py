@@ -2,7 +2,7 @@ from odoo import fields, models
 
 
 class TrigasChofer(models.Model):
-    _name = 'x_choferes'
+    _name = 'x.choferes'
     _description = 'Choferes'
     _rec_name = 'x_name'
 
