@@ -206,7 +206,7 @@ class SaleOrder(models.Model):
             raise UserError(_('No se encontraron los tipos de operación Trigas. Actualiza el módulo nuevamente.'))
 
         p1 = self._create_trigas_picking(
-            name_suffix='Conduce 1',
+            name_suffix='Entrega a Camion',
             picking_type=picking_type_1,
             location_id=stock_location.id,
             location_dest_id=pending_out_location.id,
@@ -216,7 +216,7 @@ class SaleOrder(models.Model):
         )
 
         p2 = self._create_trigas_picking(
-            name_suffix='Conduce 2',
+            name_suffix='Entrega a Cliente',
             picking_type=picking_type_2,
             location_id=pending_out_location.id,
             location_dest_id=customer_location.id,
