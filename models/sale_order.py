@@ -85,6 +85,34 @@ class SaleOrder(models.Model):
     )
 
     @api.depends('order_line.product_id', 'order_line.product_uom_qty')
+
+    def _trigas_get_related_conduces(self):
+        self.ensure_one()
+
+        pickings = self.env['stock.picking'].search([
+            '|',
+            ('sale_id', '=', self.id),
+            ('origin', 'ilike', self.name),
+            ('trigas_step', 'in', ['1', '2']),
+        ])
+
+        return pickings
+
+    def action_cancel(self):
+        conduces_to_cancel = self.env['stock.picking']
+
+        for order in self:
+            conduces_to_cancel |= order._trigas_get_related_conduces().filtered(
+                lambda p: p.state not in ('done', 'cancel')
+            )
+
+        result = super().action_cancel()
+
+        for picking in conduces_to_cancel:
+            picking.action_cancel()
+
+        return result
+
     def _compute_has_trigas_cylinders(self):
         for order in self:
             cylinder_lines = order.order_line.filtered(
@@ -166,12 +194,55 @@ class SaleOrder(models.Model):
 
         return lines
 
+
+    def _trigas_cancel_standard_delivery_pickings(self):
+        self.ensure_one()
+
+        trigas_products = self._get_trigas_cylinder_lines().mapped('product_id')
+
+        standard_pickings = self.picking_ids.filtered(
+            lambda p:
+                not p.trigas_step
+                and p.state not in ('done', 'cancel')
+        )
+
+        for picking in standard_pickings:
+            trigas_moves = picking.move_ids_without_package.filtered(
+                lambda move: move.product_id in trigas_products
+            )
+
+            normal_moves = picking.move_ids_without_package - trigas_moves
+
+            # Si el delivery normal solo tiene productos Trigas, se cancela completo.
+            if trigas_moves and not normal_moves:
+                picking.action_cancel()
+                continue
+
+            # Si el delivery normal tiene mezcla, solo cancelamos/quitaríamos las líneas Trigas.
+            # Las líneas normales, como Aire, se quedan en el WH/OUT.
+            for move in trigas_moves:
+                if move.state not in ('done', 'cancel'):
+                    move._action_cancel()
+
+            # Reconfirmar y reservar lo que quede normal en el WH/OUT.
+            if normal_moves:
+                picking.action_confirm()
+                picking.action_assign()
+
+        return True
+
+
     def action_confirm(self):
         res = super().action_confirm()
 
         for order in self:
-            if order.has_trigas_cylinders:
+            if order._get_trigas_cylinder_lines():
+                order._trigas_cancel_standard_delivery_pickings()
                 order._generate_trigas_conduces()
+
+                if order.trigas_picking_1_id and order.trigas_picking_1_id.state not in ('done', 'cancel'):
+                    order.trigas_picking_1_id.action_confirm()
+                    order.trigas_picking_1_id.action_assign()
 
         return res
 

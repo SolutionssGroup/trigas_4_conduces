@@ -29,4 +29,18 @@
         <field name="warehouse_id" ref="stock.warehouse0"/>
     </record>
 
+    <record id="picking_type_trigas_step_3" model="stock.picking.type">
+        <field name="name">Recogida de Cilindros</field>
+        <field name="code">internal</field>
+        <field name="sequence_code">TRI3</field>
+        <field name="barcode_validation_full">True</field>
+        <field name="use_create_lots">False</field>
+        <field name="use_existing_lots">True</field>
+        <field name="show_operations">True</field>
+        <field name="show_reserved">True</field>
+        <field name="default_location_src_id" ref="stock.stock_location_stock"/>
+        <field name="default_location_dest_id" ref="stock.stock_location_stock"/>
+        <field name="warehouse_id" ref="stock.warehouse0"/>
+    </record>
+
 </odoo>

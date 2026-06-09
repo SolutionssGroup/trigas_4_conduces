@@ -1,0 +1,1056 @@
+/* =========================================================
+   TRIGAS PDA - SOLO CÓDIGO DE BARRAS TRIGAS
+   Todo está limitado por:
+   body.trigas-barcode-operational-screen
+   ========================================================= */
+
+/* =========================
+   LISTADO DE CONDUCES
+   ========================= */
+
+/* Ocultar Nuevo, buscador, paginador y filtros SOLO en Barcode Trigas */
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_cp_buttons,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_cp_buttons .btn,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_cp_buttons .btn-primary,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_searchview,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_searchview_input_container,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_searchview_icon,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_pager,
+body.trigas-barcode-operational-screen .o_action_manager .o_control_panel .o_search_options {
+    display: none !important;
+}
+
+/* Ocultar mensaje estándar “Escanee un traslado...” */
+body.trigas-barcode-operational-screen .o_kanban_tip_filter {
+    display: none !important;
+}
+
+/* Ocultar estrella, monitor, avatar y reloj en tarjeta */
+body.trigas-barcode-operational-screen .o_kanban_record .fa-star,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-star-o,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-desktop,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-television,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-tv,
+body.trigas-barcode-operational-screen .o_kanban_record .o_field_many2one_avatar_user,
+body.trigas-barcode-operational-screen .o_kanban_record .o_m2o_avatar,
+body.trigas-barcode-operational-screen .o_kanban_record img[src*="avatar"],
+body.trigas-barcode-operational-screen .o_kanban_record .o_field_kanban_activity,
+body.trigas-barcode-operational-screen .o_kanban_record .o_ActivityButtonView,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-clock-o,
+body.trigas-barcode-operational-screen .o_kanban_record .fa-clock {
+    display: none !important;
+}
+
+/* Ocultar línea Conduce: WH/... en la tarjeta del listado */
+body.trigas-barcode-operational-screen .o_kanban_record .o_kanban_record_title .text-muted,
+body.trigas-barcode-operational-screen .o_kanban_record .o_kanban_record_title span.text-muted {
+    display: none !important;
+}
+
+/* Agrandar tarjeta del listado */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record {
+    min-height: 110px !important;
+    padding: 16px 18px !important;
+    cursor: pointer;
+}
+
+/* Agrandar texto principal */
+body.trigas-barcode-operational-screen .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-operational-screen .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-operational-screen .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-operational-screen .o_kanban_record button.o_kanban_record_title {
+    font-size: 22px !important;
+    line-height: 1.3 !important;
+    font-weight: 800 !important;
+}
+
+/* Flecha atrás en listado */
+body.trigas-barcode-operational-screen .o_mobile_control_panel .o_back_button,
+body.trigas-barcode-operational-screen .o_control_panel .o_back_button,
+body.trigas-barcode-operational-screen .o_control_panel .fa-arrow-left,
+body.trigas-barcode-operational-screen .o_control_panel .oi-arrow-left {
+    font-size: 28px !important;
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+    padding: 6px !important;
+}
+
+/* =========================
+   LISTADO "RECOGIDA DE CILINDROS" (TRI3)
+   Pie de tarjeta con cliente/origen bien visible,
+   estado destacado a color y botón de acción grande.
+   Estas clases solo existen dentro de tarjetas TRI3,
+   por lo que no afectan a Entrega a Camión / Entrega a Cliente.
+   ========================= */
+
+.trigas-tri3-kanban-footer {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+    margin-top: 12px !important;
+    padding-top: 12px !important;
+    border-top: 1px solid #e2e2e2 !important;
+}
+
+.trigas-tri3-kanban-footer-info {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+}
+
+/* Cliente / ubicación de origen: dato más importante para el operador */
+.trigas-tri3-kanban-origin {
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    line-height: 1.3 !important;
+    color: #2b2b2b !important;
+    word-break: break-word !important;
+}
+
+/* Estado del traslado destacado con una pastilla de color */
+.trigas-tri3-kanban-state {
+    display: inline-block !important;
+    flex-shrink: 0 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.4px !important;
+    padding: 5px 14px !important;
+    border-radius: 14px !important;
+    white-space: nowrap !important;
+}
+
+.trigas-tri3-state-draft,
+.trigas-tri3-state-waiting,
+.trigas-tri3-state-confirmed {
+    background-color: #fff3cd !important;
+    color: #8a6d00 !important;
+}
+
+.trigas-tri3-state-assigned {
+    background-color: #cfe2ff !important;
+    color: #0a4ea3 !important;
+}
+
+.trigas-tri3-state-done {
+    background-color: #d1e7dd !important;
+    color: #0f5d39 !important;
+}
+
+.trigas-tri3-state-cancel {
+    background-color: #f8d7da !important;
+    color: #9a2530 !important;
+}
+
+/* Botón de acción grande y fácil de tocar con el dedo */
+.trigas-tri3-kanban-cta {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-height: 50px !important;
+    padding: 12px 16px !important;
+    background-color: #714B67 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    color: #ffffff !important;
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+}
+
+.trigas-tri3-kanban-cta:hover,
+.trigas-tri3-kanban-cta:focus,
+.trigas-tri3-kanban-cta:active {
+    background-color: #5d3c54 !important;
+    color: #ffffff !important;
+}
+
+.trigas-tri3-kanban-cta .fa {
+    font-size: 16px !important;
+}
+
+/* En pantallas angostas de PDA (~400px) evitar que el botón se corte o
+   que el badge de estado empuje el texto del cliente fuera de la vista */
+@media (max-width: 480px) {
+    .trigas-tri3-kanban-origin {
+        font-size: 16px !important;
+    }
+
+    .trigas-tri3-kanban-cta {
+        font-size: 16px !important;
+    }
+}
+
+/* Ocultar tarjetas kanban vacías (sin el footer TRI3 inyectado por JS):
+   evita placeholders en blanco mientras se renderiza la lista.
+   Escopado a trigas-tri3-list-active (clase puesta por JS solo cuando el
+   contenido visible es Recogida de Cilindros) para no afectar ni el menú
+   de Operaciones ni la lista de pickings TRI1/TRI2 (action=406). */
+body.trigas-tri3-list-active .o_kanban_record:not(:has(.trigas-tri3-kanban-footer)) {
+    display: none !important;
+}
+
+/* =========================
+   PANTALLA INTERNA DEL CONDUCE
+   ========================= */
+
+/* Header interno */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .navbar {
+    min-height: 56px !important;
+    height: 56px !important;
+    position: relative !important;
+    margin-bottom: 54px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header span,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .o_barcode_title,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .navbar-brand {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+}
+
+/* Flecha volver interna */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .fa-arrow-left,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .oi-arrow-left,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header button {
+    font-size: 26px !important;
+    min-width: 48px !important;
+    min-height: 48px !important;
+}
+
+/* Ocultar iconos info/configuración */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .fa-info-circle,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .fa-info,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .fa-cog,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header .fa-gear,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header button[title*="Información"],
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header button[title*="Information"],
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header button[title*="Configuración"],
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header button[title*="Settings"] {
+    display: none !important;
+}
+
+/* Ocultar letrero nativo de Odoo */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_scan_message,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_scan_message.o_scan_product,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_status,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_lines_header {
+    display: none !important;
+}
+
+/* Letrero propio */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_header::after {
+    content: "ESCANEAR PRODUCTO";
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: -54px !important;
+    height: 54px !important;
+    background: #343840 !important;
+    color: #ffffff !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px !important;
+    z-index: 20 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Líneas del producto */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line {
+    min-height: 104px !important;
+    height: auto !important;
+    padding: 16px 14px !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+}
+
+/* Texto línea producto */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line span,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line strong,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_product_label,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_line_title,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_barcode_line_title {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+}
+
+/* Línea escaneada naranja */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line.trigas-last-scanned-line,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line.o_selected.trigas-last-scanned-line {
+    background: #fff0d6 !important;
+    border: 3px solid #ff9800 !important;
+    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.25) !important;
+}
+
+/* Ocultar botón AÑADIR PRODUCTO */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control .o_add_line,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control button.o_add_line,
+body.trigas-barcode-operational-screen .o_barcode_client_action button[name="add_product"],
+body.trigas-barcode-operational-screen .o_barcode_client_action button[title*="Añadir producto"],
+body.trigas-barcode-operational-screen .o_barcode_client_action button[title*="Add Product"],
+body.trigas-barcode-operational-screen .o_barcode_client_action button:has(.fa-plus) {
+    display: none !important;
+}
+
+/* Botón VALIDAR ancho completo */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control .btn,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control .btn-primary,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_validate_page {
+    min-height: 58px !important;
+    font-size: 19px !important;
+    font-weight: 800 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control .btn-primary,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_validate_page {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+}
+
+/* Ocultar despliegue nativo feo de seriales */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line button.o_toggle_sublines,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_toggle_sublines,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line button:has(.fa-caret-down),
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line button:has(.fa-caret-up),
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line button:has(.fa-chevron-down),
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line button:has(.fa-chevron-up),
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_sublines,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line .o_barcode_sublines,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line [class*="subline"],
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line [class*="Sublines"] {
+    display: none !important;
+}
+
+/* Lista simple de seriales */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-list {
+    width: 100% !important;
+    margin-top: 10px !important;
+    padding: 8px 10px !important;
+    background: #ffffff !important;
+    border-top: 1px solid #dddddd !important;
+    font-size: 13px !important;
+    line-height: 1.3 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-title {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    color: #555555 !important;
+    margin-bottom: 5px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-items {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-row {
+    font-size: 13px !important;
+    color: #222222 !important;
+    background: #f5f5f5 !important;
+    border-radius: 4px !important;
+    padding: 4px 6px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+
+/* Evitar scroll horizontal SOLO en Barcode Trigas */
+body.trigas-barcode-operational-screen .o_barcode_client_action,
+body.trigas-barcode-operational-screen .o_barcode_client_action * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action {
+    overflow-x: hidden !important;
+}
+
+/* TRIGAS PDA - seriales debajo del producto */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-list {
+    display: block;
+    width: 100% !important;
+    margin-top: 10px !important;
+    padding: 8px 10px !important;
+    background: #ffffff !important;
+    border-top: 1px solid #dddddd !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-title {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    color: #555555 !important;
+    margin-bottom: 5px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-row {
+    font-size: 13px !important;
+    color: #222222 !important;
+    background: #f3f3f3 !important;
+    border-radius: 4px !important;
+    padding: 4px 6px !important;
+    margin-bottom: 3px !important;
+    width: 100% !important;
+}
+
+/* =========================
+   PANTALLA DE ESCANEO TRI3 (WH/TRI3/...)
+   Texto e interacciones más grandes para operadores de campo.
+   Aplicado solo cuando body tiene la clase trigas-tri3-active
+   para no afectar Conduce 1/2 ni otros flujos.
+   ========================= */
+
+body.trigas-tri3-active .o_barcode_client_action .o_scan_message {
+    font-size: 18px !important;
+}
+
+body.trigas-tri3-active .o_barcode_client_action .o_barcode_line .product-label {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+}
+
+body.trigas-tri3-active .o_barcode_client_action .o_barcode_line .o_barcode_scanner_qty {
+    font-size: 24px !important;
+}
+
+body.trigas-tri3-active .o_barcode_client_action .o_barcode_line .o_toggle_sublines {
+    min-width: 60px !important;
+    min-height: 60px !important;
+}
+
+body.trigas-tri3-active .o_barcode_client_action .o_barcode_line .o_toggle_sublines .fa {
+    font-size: 22px !important;
+}
+
+/* =========================================================
+   TRIGAS PDA - Seriales desplegables
+   ========================================================= */
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-list {
+    width: 100% !important;
+    margin-top: 10px !important;
+    padding: 8px 10px !important;
+    background: #ffffff !important;
+    border-top: 1px solid #dddddd !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-toggle {
+    width: 100% !important;
+    border: 0 !important;
+    background: #eeeeee !important;
+    color: #222222 !important;
+    border-radius: 6px !important;
+    padding: 9px 10px !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    text-align: left !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-arrow {
+    font-size: 16px !important;
+    font-weight: 900 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-items {
+    margin-top: 8px !important;
+    max-height: 145px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 2px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-serial-collapsed .trigas-simple-serial-items {
+    display: none !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-serial-expanded .trigas-simple-serial-items {
+    display: block !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-row {
+    font-size: 13px !important;
+    color: #222222 !important;
+    background: #f3f3f3 !important;
+    border-radius: 4px !important;
+    padding: 5px 7px !important;
+    margin-bottom: 4px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+
+/* TRIGAS PDA - Botón borrar serial */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-name {
+    flex: 1 1 auto !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-delete {
+    flex: 0 0 auto !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: #d9534f !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    padding: 4px 7px !important;
+    line-height: 1.2 !important;
+}
+
+/* TRIGAS PDA - Línea completa en verde */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line.trigas-temp-complete {
+    background: #e8f8ee !important;
+    border: 3px solid #28a745 !important;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.18) !important;
+}
+
+/* TRIGAS PDA - Mensajes de error/éxito */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-temp-pda-message {
+    margin: 8px 10px 0 10px !important;
+    padding: 9px 10px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-temp-pda-message-error {
+    background: #f8d7da !important;
+    color: #842029 !important;
+    border: 1px solid #f5c2c7 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-temp-pda-message-success {
+    background: #d1e7dd !important;
+    color: #0f5132 !important;
+    border: 1px solid #badbcc !important;
+}
+
+/* TRIGAS PDA - Ocultar mensajes amarillos/notificaciones dentro del conduce */
+body.trigas-barcode-operational-screen .o_barcode_client_action .alert,
+body.trigas-barcode-operational-screen .o_barcode_client_action .alert-warning,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_notification,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_notification_manager,
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_message,
+body.trigas-barcode-operational-screen .o_barcode_client_action [class*="alert"],
+body.trigas-barcode-operational-screen .o_barcode_client_action [class*="notification"] {
+    display: none !important;
+}
+
+/* TRIGAS PDA - Estado de ubicación destino */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-destination-status {
+    margin-top: 10px !important;
+    padding: 8px 10px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-destination-pending {
+    background: #fff3cd !important;
+    color: #664d03 !important;
+    border: 1px solid #ffecb5 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-destination-ok {
+    background: #d1e7dd !important;
+    color: #0f5132 !important;
+    border: 1px solid #badbcc !important;
+}
+
+/* Botón validar visualmente bloqueado */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-validate-disabled {
+    opacity: 0.45 !important;
+    filter: grayscale(1) !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-validate-enabled {
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* TRIGAS PDA - Forzar lista plegada correctamente */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-serial-collapsed .trigas-simple-serial-items {
+    display: none !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-serial-expanded .trigas-simple-serial-items {
+    display: block !important;
+}
+
+/* TRIGAS PDA - Botón validar habilitado/deshabilitado */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-validate-disabled {
+    opacity: 0.45 !important;
+    filter: grayscale(1) !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-validate-enabled {
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* TRIGAS PDA - Verde más visible al completar seriales */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_line.trigas-temp-complete {
+    background: #e8f8ee !important;
+    border: 3px solid #28a745 !important;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.20) !important;
+}
+
+/* TRIGAS PDA - contador de respaldo si Odoo separa el 0 / 3 */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-temp-counter-override {
+    margin-top: 8px !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+    color: #333333 !important;
+}
+
+/* TRIGAS PDA - contador propio estable */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-pda-own-counter {
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+    padding: 8px 10px !important;
+    border-radius: 6px !important;
+    background: #f0f0f0 !important;
+    color: #222222 !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+}
+
+/* TRIGAS PDA - ocultar contador nativo de Odoo */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-hide-native-counter {
+    display: none !important;
+}
+
+/* TRIGAS PDA - contador personalizado */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-pda-own-counter {
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+    padding: 10px 12px !important;
+    border-radius: 6px !important;
+    background: #f0f0f0 !important;
+    color: #222222 !important;
+    font-size: 23px !important;
+    font-weight: 900 !important;
+}
+
+/* TRIGAS PDA - ocultar contador nativo de Odoo 0 / 3 */
+body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_scanner_qty {
+    display: none !important;
+}
+
+/* TRI3 nativo Odoo: no aplicar apariencia personalizada de Conduce 1/2 */
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_lines_header,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_lines,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line button.o_toggle_sublines,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line .o_sublines,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line .o_barcode_sublines,
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line [class*="subline"],
+body.trigas-tri3-native-screen .o_barcode_client_action .o_barcode_line [class*="Sublines"] {
+    display: revert !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* TRI3: ocultar solo el resumen redundante de seriales.
+   No toca la línea nativa ni el desplegable de seriales. */
+.o_barcode_client_action .o_barcode_line .trigas-simple-serial-list {
+    display: none !important;
+}
+
+
+/* ============================================================
+   TRIGAS PDA - Pantalla principal nativa de Barcode más grande
+   Pantalla de tipos de operación: Recepciones, Entrega a Camion,
+   Entrega a Cliente, Recogida de Cilindros, etc.
+   ============================================================ */
+
+body.trigas-barcode-operational-screen .o_kanban_view {
+    padding: 12px 10px 18px 10px !important;
+}
+
+/* Cada tarjeta/bloque de operación */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record {
+    width: 100% !important;
+    min-height: 104px !important;
+    margin: 0 0 16px 0 !important;
+    padding: 12px 14px !important;
+    border-radius: 0 !important;
+    border: 1px solid #d8d8d8 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Título: Recepciones, Entrega a Camion, etc. */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title strong {
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    line-height: 1.25 !important;
+    color: #222222 !important;
+    margin-bottom: 10px !important;
+}
+
+/* Botón A PROCESAR */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record button,
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .btn,
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record a.btn {
+    min-height: 54px !important;
+    width: 100% !important;
+    font-size: 19px !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 0 !important;
+    padding: 12px 10px !important;
+}
+
+/* Texto interno del botón */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record button *,
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .btn * {
+    font-size: 19px !important;
+    font-weight: 900 !important;
+}
+
+/* Separación superior del contenido */
+body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record > div {
+    gap: 8px !important;
+}
+
+/* Barra superior / paginación */
+body.trigas-barcode-operational-screen .o_control_panel,
+body.trigas-barcode-operational-screen .o_mobile_control_panel {
+    min-height: 52px !important;
+}
+
+body.trigas-barcode-operational-screen .o_control_panel .o_pager,
+body.trigas-barcode-operational-screen .o_mobile_control_panel .o_pager {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+}
+
+body.trigas-barcode-operational-screen .o_control_panel button,
+body.trigas-barcode-operational-screen .o_mobile_control_panel button {
+    min-height: 42px !important;
+    min-width: 42px !important;
+    font-size: 20px !important;
+}
+
+/* Ajuste para PDA estrecha */
+@media (max-width: 480px) {
+    body.trigas-barcode-operational-screen .o_kanban_view {
+        padding: 10px 8px 18px 8px !important;
+    }
+
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record {
+        min-height: 108px !important;
+        margin-bottom: 17px !important;
+        padding: 13px 14px !important;
+    }
+
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title,
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .o_kanban_record_title strong {
+        font-size: 20px !important;
+    }
+
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record button,
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record .btn,
+    body.trigas-barcode-operational-screen .o_kanban_view .o_kanban_record a.btn {
+        min-height: 56px !important;
+        font-size: 19px !important;
+    }
+}
+
+
+/* ============================================================
+   TRIGAS PDA - Menú principal nativo de Barcode más grande
+   Clase: body.trigas-barcode-main-menu-screen-old-disabled
+   ============================================================ */
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    padding: 12px 10px 22px 10px !important;
+}
+
+/* Tarjeta de cada operación */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record {
+    width: 100% !important;
+    min-height: 108px !important;
+    margin: 0 0 17px 0 !important;
+    padding: 13px 14px !important;
+    border: 1px solid #d7d7d7 !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Nombre de la operación */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record strong,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record span {
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    line-height: 1.25 !important;
+}
+
+/* Botón A PROCESAR */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record a.btn {
+    min-height: 56px !important;
+    width: 100% !important;
+    font-size: 19px !important;
+    font-weight: 900 !important;
+    padding: 12px 10px !important;
+}
+
+/* Texto dentro del botón */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button *,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn * {
+    font-size: 19px !important;
+    font-weight: 900 !important;
+}
+
+/* Barra superior/paginador */
+body.trigas-barcode-main-menu-screen-old-disabled .o_control_panel,
+body.trigas-barcode-main-menu-screen-old-disabled .o_mobile_control_panel {
+    min-height: 54px !important;
+}
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_control_panel .o_pager,
+body.trigas-barcode-main-menu-screen-old-disabled .o_mobile_control_panel .o_pager {
+    font-size: 18px !important;
+    font-weight: 900 !important;
+}
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_control_panel button,
+body.trigas-barcode-main-menu-screen-old-disabled .o_mobile_control_panel button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    font-size: 20px !important;
+}
+
+@media (max-width: 480px) {
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record {
+        min-height: 112px !important;
+        margin-bottom: 18px !important;
+    }
+
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button,
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn,
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record a.btn {
+        min-height: 58px !important;
+        font-size: 20px !important;
+    }
+}
+
+
+/* ============================================================
+   TRIGAS PDA - Menú principal Barcode compacto
+   Más legible, pero sin alargar demasiado la pantalla.
+   Override final sobre el bloque grande anterior.
+   ============================================================ */
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    padding: 8px 10px 12px 10px !important;
+}
+
+/* Tarjeta compacta */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record {
+    min-height: 82px !important;
+    margin: 0 0 9px 0 !important;
+    padding: 8px 12px !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Nombre de operación */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record strong,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record span {
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    margin-bottom: 5px !important;
+}
+
+/* Botón A PROCESAR compacto */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record a.btn {
+    min-height: 42px !important;
+    height: 42px !important;
+    font-size: 16px !important;
+    font-weight: 900 !important;
+    padding: 8px 10px !important;
+}
+
+/* Texto dentro del botón */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button *,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn * {
+    font-size: 16px !important;
+    font-weight: 900 !important;
+}
+
+/* Barra superior más compacta */
+body.trigas-barcode-main-menu-screen-old-disabled .o_control_panel,
+body.trigas-barcode-main-menu-screen-old-disabled .o_mobile_control_panel {
+    min-height: 44px !important;
+}
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_control_panel button,
+body.trigas-barcode-main-menu-screen-old-disabled .o_mobile_control_panel button {
+    min-height: 36px !important;
+    min-width: 36px !important;
+    font-size: 18px !important;
+}
+
+@media (max-width: 480px) {
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record {
+        min-height: 80px !important;
+        margin-bottom: 8px !important;
+        padding: 8px 12px !important;
+    }
+
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button,
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn,
+    body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record a.btn {
+        min-height: 42px !important;
+        height: 42px !important;
+        font-size: 16px !important;
+    }
+}
+
+
+/* ============================================================
+   TRIGAS PDA - Ocultar tarjetas vacías del menú principal Barcode
+   Evita scroll hacia abajo cuando Odoo renderiza kanban records vacíos.
+   ============================================================ */
+
+/* Ocultar records completamente vacíos */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record:empty {
+    display: none !important;
+}
+
+/* Ocultar records que no tengan botón/enlace de acción */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record:not(:has(button)):not(:has(a.btn)):not(:has(.btn)) {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+
+/* Quitar altura sobrante del contenedor cuando solo quedan tarjetas visibles */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    align-content: flex-start !important;
+    justify-content: flex-start !important;
+    padding-bottom: 6px !important;
+}
+
+/* Evitar espacios artificiales al final */
+body.trigas-barcode-main-menu-screen-old-disabled .o_content,
+body.trigas-barcode-main-menu-screen-old-disabled .o_action_manager,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    min-height: auto !important;
+}
+
+
+/* ============================================================
+   TRIGAS PDA - Código de Barras menú grande compacto final
+   Solo cuando body tiene trigas-barcode-main-menu-screen
+   ============================================================ */
+
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    padding: 10px 10px 10px 10px !important;
+}
+
+/* Tarjetas visibles */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record {
+    min-height: 92px !important;
+    margin: 0 0 10px 0 !important;
+    padding: 10px 12px !important;
+    border: 1px solid #d0d0d0 !important;
+    box-shadow: none !important;
+}
+
+/* Títulos */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record strong {
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1.2 !important;
+    margin-bottom: 7px !important;
+}
+
+/* Botón */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record a.btn {
+    min-height: 48px !important;
+    height: 48px !important;
+    width: 100% !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    padding: 9px 10px !important;
+}
+
+/* Texto del botón */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record button *,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record .btn * {
+    font-size: 18px !important;
+    font-weight: 900 !important;
+}
+
+/* Ocultar tarjetas vacías */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record:empty,
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view .o_kanban_record:not(:has(button)):not(:has(a.btn)):not(:has(.btn)) {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+
+/* Evitar espacio sobrante abajo */
+body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
+    align-content: flex-start !important;
+    justify-content: flex-start !important;
+    min-height: auto !important;
+}

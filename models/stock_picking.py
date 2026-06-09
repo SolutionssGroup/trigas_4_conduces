@@ -24,6 +24,7 @@ class StockPicking(models.Model):
     trigas_step = fields.Selection([
         ('1', 'Conduce 1'),
         ('2', 'Conduce 2'),
+        ('3', 'Conduce Recogida'),
     ], string='Paso flujo Trigas', copy=False)
 
     sale_order_id = fields.Many2one(
@@ -113,7 +114,7 @@ class StockPicking(models.Model):
     def _trigas_create_or_update_signature_record(self):
         self.ensure_one()
 
-        if not self.is_trigas_conduce or self.trigas_step != '2':
+        if not self.is_trigas_conduce or self.trigas_step not in ('2', '3'):
             return False
 
         if not self.trigas_delivery_signature:
@@ -152,82 +153,152 @@ class StockPicking(models.Model):
             'target': 'current',
         }
 
+    def _trigas_is_step_3_or_tri3_picking(self):
+        self.ensure_one()
+
+        name = (self.name or '').upper()
+        origin = (self.origin or '').upper()
+        note = (self.note or '').upper()
+
+        return bool(
+            self.trigas_step == '3'
+            or '/TRI3/' in name
+            or name.startswith('WH/TRI3/')
+            or 'TRI3' in name
+            or 'RECOGIDA' in origin
+            or 'RECOGIDA' in note
+        )
+
     def action_open_trigas_signature_wizard(self):
         self.ensure_one()
 
-        if not self.is_trigas_conduce or self.trigas_step != '2':
-            raise UserError(_('La firma solo aplica al Conduce 2.'))
+        if not self.is_trigas_conduce or self.trigas_step not in ('2', '3'):
+            raise UserError(_('La firma solo aplica al Conduce 2 y a la Recogida de Cilindros.'))
+
+        if self.trigas_step == '2':
+            signature_info = self.trigas_barcode_get_signature_info()
+
+            if not signature_info.get('customer_location_ready'):
+                raise UserError(_('Debes escanear la ubicación del cliente antes de firmar.'))
+
+            if not signature_info.get('has_done_cylinders'):
+                raise UserError(_('Debes escanear los seriales antes de firmar.'))
+
+        if self.trigas_step == '3':
+            signature_info = self.trigas_barcode_get_signature_info()
+
+            if not signature_info.get('has_done_cylinders'):
+                raise UserError(_('Debes escanear al menos un cilindro antes de firmar.'))
+
+            if not signature_info.get('truck_location_ready'):
+                raise UserError(_('Debes escanear la ubicación del camión antes de firmar.'))
+
+        view = self.env.ref(
+            'trigas_4_conduces.view_trigas_delivery_signature_wizard_form',
+            raise_if_not_found=False
+        )
+
+        if not view:
+            raise UserError(_('No se encontró la vista del wizard de firma.'))
 
         return {
             'type': 'ir.actions.act_window',
-            'name': _('Firma de entrega'),
+            'name': _('Firmar recogida') if self.trigas_step == '3' else _('Firmar conduce'),
             'res_model': 'trigas.delivery.signature.wizard',
             'view_mode': 'form',
+            'views': [(view.id, 'form')],
+            'view_id': view.id,
             'target': 'new',
             'context': {
                 'default_picking_id': self.id,
                 'default_signed_by': self.partner_id.name or '',
-            }
+            },
         }
-
     def trigas_barcode_get_signature_info(self):
         self.ensure_one()
 
-        if not self.is_trigas_conduce or self.trigas_step != '2':
+        if not self.is_trigas_conduce or self.trigas_step not in ('2', '3'):
             return {
                 'is_step_2': False,
+                'is_step_3': False,
                 'can_sign': False,
                 'signed': False,
                 'message': '',
                 'customer_location_ready': False,
+                'truck_location_ready': False,
                 'has_done_cylinders': False,
             }
 
         done_serial_lines = self.move_line_ids.filtered(
             lambda ml: ml.lot_id and ml.qty_done > 0 and ml.product_id.product_tmpl_id.is_cylinder_conduce
         )
-
         done_cylinder_moves = self.move_ids_without_package.filtered(
             lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce and m.quantity_done > 0
         )
 
         has_done_cylinders = bool(done_serial_lines or done_cylinder_moves)
-
-        expected_customer_location = self._trigas_get_expected_customer_location()
-        customer_location_ready = bool(
-            expected_customer_location
-            and self.location_dest_id
-            and self.location_dest_id.id == expected_customer_location.id
-            and self.trigas_customer_location_scanned
-        )
-
         signed = bool(self.trigas_delivery_signature)
-        can_sign = bool(has_done_cylinders and customer_location_ready and not signed)
 
-        message = ''
-        if signed:
-            message = _('Firma registrada')
-        elif not has_done_cylinders:
-            message = _('Escanea los seriales antes de firmar.')
-        elif not customer_location_ready:
-            message = _('Escanea la ubicación del cliente antes de firmar.')
+        customer_location_ready = False
+        truck_location_ready = False
+
+        if self.trigas_step == '2':
+            expected_customer_location = self._trigas_get_expected_customer_location()
+            customer_location_ready = bool(
+                expected_customer_location
+                and self.location_dest_id
+                and self.location_dest_id.id == expected_customer_location.id
+                and self.trigas_customer_location_scanned
+            )
+            can_sign = bool(has_done_cylinders and customer_location_ready and not signed)
+
+            if signed:
+                message = _('Firma registrada')
+            elif not has_done_cylinders:
+                message = _('Escanea los seriales antes de firmar.')
+            elif not customer_location_ready:
+                message = _('Escanea la ubicación del cliente antes de firmar.')
+            else:
+                message = _('Listo para firmar.')
+
         else:
-            message = _('Listo para firmar.')
+            truck_location_ready = bool(
+                self.trigas_truck_location_id
+                and self.location_dest_id
+                and self.location_dest_id.id == self.trigas_truck_location_id.id
+            )
+            can_sign = bool(has_done_cylinders and truck_location_ready and not signed)
+
+            if signed:
+                message = _('Firma registrada')
+            elif not has_done_cylinders:
+                message = _('Escanea los seriales antes de firmar.')
+            elif not truck_location_ready:
+                message = _('Escanea la ubicación del camión antes de firmar.')
+            else:
+                message = _('Listo para firmar.')
 
         return {
-            'is_step_2': True,
+            'is_step_2': self.trigas_step == '2',
+            'is_step_3': self.trigas_step == '3',
             'can_sign': can_sign,
             'signed': signed,
             'message': message,
             'customer_location_ready': customer_location_ready,
+            'truck_location_ready': truck_location_ready,
             'has_done_cylinders': has_done_cylinders,
         }
-
     def trigas_barcode_save_delivery_signature(self, signed_by, signature_base64):
         self.ensure_one()
 
-        if not self.is_trigas_conduce or self.trigas_step != '2':
-            raise UserError(_('La firma solo puede registrarse en el Conduce 2.'))
+        is_step_2 = bool(self.is_trigas_conduce and self.trigas_step == '2')
+        is_step_3 = bool(
+            (self.is_trigas_conduce and self.trigas_step == '3')
+            or self._trigas_is_step_3_or_tri3_picking()
+        )
+
+        if not is_step_2 and not is_step_3:
+            raise UserError(_('La firma solo puede registrarse en el Conduce 2 o en la Recogida de Cilindros.'))
 
         if not signed_by or not signed_by.strip():
             raise UserError(_('Debes indicar el nombre de quien recibe.'))
@@ -235,8 +306,19 @@ class StockPicking(models.Model):
         if not signature_base64:
             raise UserError(_('Debes capturar la firma antes de guardar.'))
 
-        if not self.trigas_customer_location_scanned:
-            raise UserError(_('Debes escanear la ubicación del cliente antes de firmar.'))
+        if self.trigas_step == '2':
+            if not self.trigas_customer_location_scanned:
+                raise UserError(_('Debes escanear la ubicación del cliente antes de firmar.'))
+
+        if is_step_3:
+            if not self.trigas_truck_location_id:
+                raise UserError(_('Debes escanear la ubicación del camión antes de firmar.'))
+
+            has_done_cylinders = bool(self.move_line_ids.filtered(
+                lambda ml: ml.lot_id and ml.qty_done > 0 and ml.product_id.product_tmpl_id.is_cylinder_conduce
+            ))
+            if not has_done_cylinders:
+                raise UserError(_('Debes escanear al menos un cilindro antes de firmar.'))
 
         if isinstance(signature_base64, str) and 'base64,' in signature_base64:
             signature_base64 = signature_base64.split('base64,', 1)[1]
@@ -250,12 +332,11 @@ class StockPicking(models.Model):
 
         self._trigas_create_or_update_signature_record()
         return True
-
     def action_send_trigas_delivery_email(self):
         self.ensure_one()
 
-        if not self.is_trigas_conduce or self.trigas_step != '2':
-            raise UserError(_('El envío de firma por correo solo aplica al Conduce 2.'))
+        if not self.is_trigas_conduce or self.trigas_step not in ('2', '3'):
+            raise UserError(_('El envío de firma por correo solo aplica al Conduce 2 y a la Recogida de Cilindros.'))
 
         if not self.partner_id.email:
             raise UserError(_('El cliente no tiene un correo electrónico definido.'))
@@ -281,6 +362,12 @@ class StockPicking(models.Model):
                     picking._trigas_prepare_step_1_before_validate()
                 elif picking.trigas_step == '2':
                     picking._trigas_prepare_step_2_before_validate()
+                elif picking.trigas_step == '3':
+                    picking._trigas_prepare_step_3_before_validate()
+            elif picking._trigas_barcode_is_pickup_step():
+                # TRI3 nativo: puede no tener is_trigas_conduce/trigas_step,
+                # pero debe validarse como recogida, no como transferencia interna normal.
+                picking._trigas_prepare_step_3_before_validate()
             elif picking._trigas_is_native_internal_transfer():
                 picking._trigas_prepare_native_internal_transfer_before_validate()
 
@@ -534,6 +621,49 @@ class StockPicking(models.Model):
 
         return True
 
+    def trigas_barcode_confirm_expected_customer_location_for_pda(self):
+        self.ensure_one()
+
+        if not (self.is_trigas_conduce and self.trigas_step == '2'):
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce 2.'),
+            }
+
+        expected_location = self._trigas_get_expected_customer_location()
+
+        if not expected_location:
+            return {
+                'ok': False,
+                'message': _('La orden no tiene una ubicación Trigas de cliente definida.'),
+            }
+
+        if expected_location.usage != 'customer':
+            return {
+                'ok': False,
+                'message': _('La ubicación esperada del cliente no es de tipo cliente: %s') % expected_location.display_name,
+            }
+
+        self.write({
+            'location_dest_id': expected_location.id,
+            'trigas_customer_location_scanned': True,
+        })
+
+        self.move_ids_without_package.write({
+            'location_dest_id': expected_location.id,
+        })
+
+        self.move_line_ids.write({
+            'location_dest_id': expected_location.id,
+        })
+
+        return {
+            'ok': True,
+            'location_id': expected_location.id,
+            'location_name': expected_location.display_name,
+            'message': _('Ubicación cliente confirmada: %s') % expected_location.display_name,
+        }
+
     def trigas_barcode_validate_step_1_capacity(self):
         self.ensure_one()
 
@@ -727,6 +857,361 @@ class StockPicking(models.Model):
             'source_was_detected': source_was_detected,
         }
 
+
+
+
+
+
+    def trigas_barcode_get_pda_expected_qty(self):
+        self.ensure_one()
+
+        expected_qty = sum(self.move_ids_without_package.mapped('product_uom_qty'))
+
+        return {
+            'expected_qty': expected_qty,
+            'destination_name': self.location_dest_id.display_name if self.location_dest_id else '',
+            'destination_barcode': self.location_dest_id.barcode if self.location_dest_id and self.location_dest_id.barcode else '',
+            'state': self.state,
+        }
+
+    def trigas_barcode_validate_destination_location_for_pda(self, scanned_value):
+        self.ensure_one()
+
+        scanned_value = (scanned_value or '').strip()
+
+        if not scanned_value:
+            return {
+                'ok': False,
+                'is_location': False,
+                'message': _('No se recibió ninguna ubicación.'),
+            }
+
+        destination = self.location_dest_id
+
+        if not destination:
+            return {
+                'ok': False,
+                'is_location': False,
+                'message': _('Este conduce no tiene ubicación destino definida.'),
+            }
+
+        # En Conduce 1 puede existir un destino temporal como WH/PENDIENTE_IDA.
+        # Por eso NO validamos primero self.location_dest_id.
+        # Validamos la ubicación realmente escaneada y, si es camión, la registramos como destino.
+
+        Location = self.env['stock.location']
+
+        # Buscar primero por barcode exacto. Esto evita que Odoo devuelva
+        # una ubicación equivocada por búsquedas amplias en display_name.
+        scanned_location = Location.search([
+            ('barcode', '=', scanned_value),
+        ], limit=1)
+
+        if not scanned_location:
+            scanned_location = Location.search([
+                ('name', '=', scanned_value),
+            ], limit=1)
+
+        if not scanned_location:
+            scanned_location = Location.search([
+                ('complete_name', '=', scanned_value),
+            ], limit=1)
+
+        if not scanned_location:
+            scanned_location = Location.search([
+                ('display_name', '=', scanned_value),
+            ], limit=1)
+
+        if not scanned_location:
+            return {
+                'ok': False,
+                'is_location': False,
+                'message': _('No es una ubicación de camión: %s') % scanned_value,
+            }
+
+        if self.trigas_step == '1':
+            if scanned_location.usage != 'internal':
+                return {
+                    'ok': False,
+                    'is_location': True,
+                    'message': _('No es una ubicación de camión: %s') % scanned_value,
+                    'location_id': scanned_location.id,
+                    'location_name': scanned_location.display_name,
+                }
+
+            if not scanned_location.is_trigas_truck_location:
+                return {
+                    'ok': False,
+                    'is_location': True,
+                    'message': _('No es una ubicación de camión: %s') % scanned_value,
+                    'location_id': scanned_location.id,
+                    'location_name': scanned_location.display_name,
+                }
+
+            self.trigas_barcode_register_truck_location(scanned_location.id)
+
+            return {
+                'ok': True,
+                'is_location': True,
+                'message': _('Ubicación camión confirmada: %s') % scanned_location.display_name,
+                'location_id': scanned_location.id,
+                'location_name': scanned_location.display_name,
+                'expected_location_id': scanned_location.id,
+                'expected_location_name': scanned_location.display_name,
+            }
+
+        # La ubicación leída debe ser exactamente la ubicación destino del picking.
+        if scanned_location.id != destination.id:
+            return {
+                'ok': False,
+                'is_location': True,
+                'message': _('Ubicación incorrecta. Leída: %(read)s. Esperada: %(expected)s') % {
+                    'read': scanned_location.display_name,
+                    'expected': destination.display_name,
+                },
+                'location_id': scanned_location.id,
+                'location_name': scanned_location.display_name,
+                'expected_location_id': destination.id,
+                'expected_location_name': destination.display_name,
+            }
+
+        return {
+            'ok': True,
+            'is_location': True,
+            'message': _('Ubicación destino confirmada: %s') % destination.display_name,
+            'location_id': destination.id,
+            'location_name': destination.display_name,
+            'location_barcode': destination.barcode or '',
+        }
+
+
+    def trigas_barcode_validate_temp_serial_for_pda(self, serial_name, existing_serials=None):
+        self.ensure_one()
+
+        serial_name = (serial_name or '').strip()
+        existing_serials = existing_serials or []
+
+        # TRI3 / Recogida de Cilindros es un conduce abierto.
+        # Durante el escaneo NO debe crear stock.move ni stock.move.line.
+        # Solo validamos que el serial exista, sea cilindro y esté disponible.
+        tri3_open_pickup = self._trigas_barcode_is_pickup_step()
+
+        if self.state in ('done', 'cancel'):
+            return {
+                'ok': False,
+                'message': _('Este conduce ya está realizado o cancelado.'),
+            }
+
+        if not serial_name:
+            return {
+                'ok': False,
+                'message': _('No se recibió ningún serial.'),
+            }
+
+        if serial_name in existing_serials:
+            return {
+                'ok': False,
+                'message': _('El serial %s ya fue leído.') % serial_name,
+            }
+
+        expected_qty = sum(self.move_ids_without_package.mapped('product_uom_qty'))
+        if expected_qty and len(existing_serials) >= expected_qty:
+            return {
+                'ok': False,
+                'message': _('Ya se leyó la cantidad completa esperada.'),
+            }
+
+        lot = self.env['stock.lot'].search([
+            ('name', '=', serial_name),
+        ], limit=1)
+
+        if not lot:
+            return {
+                'ok': False,
+                'message': _('El serial %s no existe en Odoo.') % serial_name,
+            }
+
+        if tri3_open_pickup:
+            if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name,
+                }
+
+            duplicate_line = self.move_line_ids.filtered(
+                lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+            )
+            if duplicate_line:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s ya fue guardado en este conduce.') % serial_name,
+                }
+
+            try:
+                source_location = self._trigas_get_current_location_for_lot_step_3(lot)
+            except UserError as e:
+                return {
+                    'ok': False,
+                    'message': str(e),
+                }
+
+            return {
+                'ok': True,
+                'tri3_open_pickup': True,
+                'serial': serial_name,
+                'product': lot.product_id.display_name if lot.product_id else '',
+                'source_location_id': source_location.id,
+                'source_location_name': source_location.display_name,
+                'message': _('Serial leído: %s | Origen: %s') % (
+                    serial_name,
+                    source_location.display_name,
+                ),
+            }
+
+        allowed_products = self.move_ids_without_package.mapped('product_id')
+
+        if lot.product_id and lot.product_id not in allowed_products:
+            expected_products = ', '.join(allowed_products.mapped('display_name'))
+            return {
+                'ok': False,
+                'message': _('El serial %(serial)s pertenece al producto "%(serial_product)s", pero este conduce espera "%(expected_product)s".') % {
+                    'serial': serial_name,
+                    'serial_product': lot.product_id.display_name,
+                    'expected_product': expected_products,
+                },
+            }
+
+        return {
+            'ok': True,
+            'serial': serial_name,
+            'product': lot.product_id.display_name if lot.product_id else '',
+        }
+
+    def trigas_barcode_save_temp_serials_for_pda(self, serial_names):
+        self.ensure_one()
+
+        if self.state in ('done', 'cancel'):
+            raise UserError(_('No puedes modificar seriales de un conduce realizado o cancelado.'))
+
+        serial_names = serial_names or []
+        serial_names = [s for s in serial_names if s]
+
+        # Evitar duplicados manteniendo el orden leído en la PDA.
+        clean_serials = []
+        for serial in serial_names:
+            if serial not in clean_serials:
+                clean_serials.append(serial)
+
+        serial_names = clean_serials
+
+        # Borrar líneas hechas anteriores del conduce.
+        done_serial_lines = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id and ml.qty_done > 0
+        )
+        done_serial_lines.unlink()
+
+        if not serial_names:
+            if self.state not in ('done', 'cancel'):
+                self.action_confirm()
+                self.action_assign()
+
+            return {
+                'serials': self.trigas_barcode_get_scanned_serials_for_pda(),
+                'state': self.state,
+            }
+
+        moves_by_product = {}
+        for move in self.move_ids_without_package:
+            moves_by_product.setdefault(move.product_id.id, move)
+
+        for serial_name in serial_names:
+            lot = self.env['stock.lot'].search([('name', '=', serial_name)], limit=1)
+
+            if not lot:
+                raise UserError(_('No se encontró el serial %s.') % serial_name)
+
+            product = lot.product_id
+            move = moves_by_product.get(product.id)
+
+            if not move:
+                # Si por alguna razón el lote no tiene product_id o no coincide,
+                # usamos la primera línea del picking como respaldo.
+                move = self.move_ids_without_package[:1]
+
+            if not move:
+                raise UserError(_('No existe una línea de movimiento para guardar el serial %s.') % serial_name)
+
+            self.env['stock.move.line'].create({
+                'picking_id': self.id,
+                'move_id': move.id,
+                'product_id': move.product_id.id,
+                'product_uom_id': move.product_uom.id,
+                'location_id': move.location_id.id,
+                'location_dest_id': move.location_dest_id.id,
+                'lot_id': lot.id,
+                'qty_done': 1.0,
+            })
+
+        if self.state not in ('done', 'cancel'):
+            self.action_confirm()
+            self.action_assign()
+
+        return {
+            'serials': self.trigas_barcode_get_scanned_serials_for_pda(),
+            'state': self.state,
+        }
+
+    def trigas_barcode_get_scanned_serials_for_pda(self):
+        self.ensure_one()
+
+        serial_lines = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id and ml.qty_done > 0
+        ).sorted(lambda ml: ml.id)
+
+        result = []
+        for line in serial_lines:
+            result.append({
+                'serial': line.lot_id.name,
+                'product': line.product_id.display_name,
+                'qty_done': line.qty_done,
+            })
+
+        return result
+
+
+    def trigas_barcode_remove_scanned_serial_for_pda(self, serial_name):
+        self.ensure_one()
+
+        if self.state in ('done', 'cancel'):
+            raise UserError(_('No puedes borrar seriales de un conduce realizado o cancelado.'))
+
+        if not serial_name:
+            return {
+                'serials': self.trigas_barcode_get_scanned_serials_for_pda(),
+                'state': self.state,
+            }
+
+        serial_lines = self.move_line_ids.filtered(
+            lambda ml:
+                ml.lot_id
+                and ml.lot_id.name == serial_name
+                and ml.qty_done > 0
+        )
+
+        if serial_lines:
+            serial_lines.unlink()
+
+        # Volvemos a poner el picking en listo si hay disponibilidad.
+        if self.state not in ('done', 'cancel'):
+            self.action_confirm()
+            self.action_assign()
+
+        return {
+            'serials': self.trigas_barcode_get_scanned_serials_for_pda(),
+            'state': self.state,
+        }
+
+
     def trigas_barcode_get_native_serial_source_location(self, lot_id):
         self.ensure_one()
 
@@ -829,6 +1314,1131 @@ class StockPicking(models.Model):
             'location_dest_id': destination_location.id,
         })
 
+    def _trigas_barcode_is_pickup_step(self):
+        self.ensure_one()
+        return bool(
+            (self.is_trigas_conduce and self.trigas_step == '3')
+            or (self.picking_type_id and self.picking_type_id.sequence_code == 'TRI3')
+        )
+
+    def _trigas_get_current_location_for_lot_step_3(self, lot):
+        self.ensure_one()
+
+        Quant = self.env['stock.quant']
+
+        quants = Quant.search([
+            ('lot_id', '=', lot.id),
+            ('quantity', '>', 0),
+            ('location_id.usage', 'in', ['customer', 'internal']),
+        ])
+
+        valid_quants = quants.filtered(
+            lambda q: q.location_id
+            and q.location_id.usage in ('customer', 'internal')
+            and q.quantity > 0
+        )
+
+        locations = valid_quants.mapped('location_id').exists()
+
+        if not locations:
+            raise UserError(_(
+                'El serial %s no tiene existencia disponible en una ubicación válida.'
+            ) % lot.name)
+
+        if len(locations) > 1:
+            raise UserError(_(
+                'El serial %s aparece con existencia en varias ubicaciones: %s. '
+                'Debes depurar el serial antes de recogerlo.'
+            ) % (
+                lot.name,
+                ', '.join(locations.mapped('display_name'))
+            ))
+
+        return locations[0]
+
+    def _trigas_get_step_3_pickup_groups(self):
+        self.ensure_one()
+
+        groups = {}
+
+        lines = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id and ml.qty_done > 0
+        ).sorted(lambda ml: (
+            ml.location_id.display_name or '',
+            ml.product_id.display_name or '',
+            ml.lot_id.name or '',
+        ))
+
+        for line in lines:
+            location = line.location_id
+            key = location.id
+
+            if key not in groups:
+                groups[key] = {
+                    'location_id': location.id,
+                    'location_name': location.display_name,
+                    'serials': [],
+                }
+
+            groups[key]['serials'].append({
+                'serial': line.lot_id.name,
+                'product': line.product_id.display_name,
+            })
+
+        return list(groups.values())
+
+    def trigas_barcode_validate_serial_step_3(self, lot_id):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        lot = self.env['stock.lot'].browse(lot_id).exists()
+
+        if not lot:
+            raise UserError(_('Serial no encontrado.'))
+
+        if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+            raise UserError(_('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % lot.name)
+
+        duplicate_line = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+        )
+
+        if duplicate_line:
+            raise UserError(_('El serial %s ya fue escaneado en este conduce de recogida.') % lot.name)
+
+        source_location = self._trigas_get_current_location_for_lot_step_3(lot)
+
+        destination_location = self.trigas_truck_location_id or self.location_dest_id or source_location
+
+        # TRI3 es recogida abierta. Al primer serial, el picking debe tomar
+        # como origen la ubicación real del serial para que Barcode renderice líneas.
+        if not self.move_line_ids:
+            self.write({
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+            })
+
+        move = self.move_ids_without_package.filtered(
+            lambda m: m.product_id.id == lot.product_id.id and m.location_id.id == source_location.id
+        )[:1]
+
+        if not move:
+            move = self.env['stock.move'].create({
+                'name': lot.product_id.display_name,
+                'product_id': lot.product_id.id,
+                'product_uom_qty': 0.0,
+                'product_uom': lot.product_id.uom_id.id,
+                'picking_id': self.id,
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+                'origin': self.origin or self.name,
+                'partner_id': self.partner_id.id if self.partner_id else False,
+            })
+
+        move.product_uom_qty = move.product_uom_qty + 1
+
+        self.env['stock.move.line'].create({
+            'move_id': move.id,
+            'picking_id': self.id,
+            'product_id': lot.product_id.id,
+            'product_uom_id': lot.product_id.uom_id.id,
+            'qty_done': 1.0,
+            'lot_id': lot.id,
+            'location_id': source_location.id,
+            'location_dest_id': destination_location.id,
+        })
+
+        # TRI3 es una recogida abierta. Al crear líneas desde PDA,
+        # debemos sacar el picking de borrador para que Barcode renderice líneas reales.
+        if self.state == 'draft':
+            self.action_confirm()
+
+        if self.state in ('confirmed', 'waiting', 'assigned'):
+            self.action_assign()
+
+        return {
+            'ok': True,
+            'tri3_open_pickup': True,
+            'serial': lot.name,
+            'product': lot.product_id.display_name,
+            'source_location_id': source_location.id,
+            'source_location_name': source_location.display_name,
+            'groups': self._trigas_get_step_3_pickup_groups(),
+            'message': _('Serial recogido: %s | Origen: %s') % (
+                lot.name,
+                source_location.display_name,
+            ),
+        }
+
+    def trigas_barcode_register_pickup_truck_location(self, location_id):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        truck_location = self.env['stock.location'].browse(location_id).exists()
+
+        if not truck_location:
+            raise UserError(_('No se encontró la ubicación del camión.'))
+
+        if truck_location.usage != 'internal' or not truck_location.is_trigas_truck_location:
+            raise UserError(_('No es una ubicación de camión: %s') % truck_location.display_name)
+
+        # Guardar destino principal del picking.
+        vals = {
+            'location_dest_id': truck_location.id,
+        }
+
+        if 'trigas_truck_location_id' in self._fields:
+            vals['trigas_truck_location_id'] = truck_location.id
+
+        self.write(vals)
+
+        # Cambiar destino de todos los movimientos y líneas ya leídas.
+        # El origen de cada serial se mantiene como su ubicación real.
+        self.move_ids.write({
+            'location_dest_id': truck_location.id,
+        })
+
+        self.move_line_ids.write({
+            'location_dest_id': truck_location.id,
+        })
+
+        groups = self._trigas_get_step_3_pickup_groups()
+
+        return {
+            'ok': True,
+            'is_location': True,
+            'location_id': truck_location.id,
+            'location_name': truck_location.display_name,
+            'truck_location_id': truck_location.id,
+            'truck_location_name': truck_location.display_name,
+            'groups': groups,
+            'has_serials': bool(groups),
+            'has_truck': True,
+            'can_validate': bool(groups),
+            'message': _('Ubicación destino camión leída: %s') % truck_location.display_name,
+        }
+    def _trigas_prepare_step_3_before_validate(self):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return True
+
+        if not self.trigas_delivery_signature:
+            raise UserError(_('Debes registrar la firma antes de validar la recogida.'))
+
+        destination = self.location_dest_id
+
+        if not destination:
+            raise UserError(_('Debes seleccionar la ubicación destino del camión antes de validar la recogida.'))
+
+        if destination.usage != 'internal' or not destination.is_trigas_truck_location:
+            raise UserError(_('La ubicación destino debe ser una ubicación camión Trigas. Ubicación actual: %s') % destination.display_name)
+
+        if 'trigas_truck_location_id' in self._fields and not self.trigas_truck_location_id:
+            self.trigas_truck_location_id = destination.id
+
+        return True
+
+
+    def trigas_barcode_process_raw_scan_step_3(self, scanned_value):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        scanned_value = (scanned_value or '').strip()
+
+        if not scanned_value:
+            raise UserError(_('Lectura vacía.'))
+
+        # En recogida abierta, lo primero que se lee normalmente son seriales.
+        # Por eso primero buscamos si la lectura corresponde a un lote/serial.
+        Lot = self.env['stock.lot']
+        lot = Lot.search([
+            ('name', '=', scanned_value),
+        ], limit=1)
+
+        if lot:
+            return self.trigas_barcode_validate_serial_step_3(lot.id)
+
+        # Si no es serial, entonces intentamos tratar la lectura como ubicación camión.
+        # No buscamos por display_name porque display_name no es un campo almacenado.
+        Location = self.env['stock.location']
+
+        location = Location.search([
+            ('barcode', '=', scanned_value),
+        ], limit=1)
+
+        if not location:
+            location = Location.search([
+                ('name', '=', scanned_value),
+            ], limit=1)
+
+        if not location:
+            location = Location.search([
+                ('complete_name', '=', scanned_value),
+            ], limit=1)
+
+        if not location:
+            raise UserError(_('No se encontró serial ni ubicación camión con la lectura: %s') % scanned_value)
+
+        if location.usage != 'internal' or not location.is_trigas_truck_location:
+            raise UserError(_('No es una ubicación de camión: %s') % scanned_value)
+
+        return self.trigas_barcode_register_pickup_truck_location(location.id)
+
+
+    @api.model
+    def trigas_pickup_validate_frontend_scan(self, scanned_value):
+        scanned_value = (scanned_value or '').strip()
+
+        if not scanned_value:
+            return {
+                'ok': False,
+                'message': _('Lectura vacía.'),
+            }
+
+        lot = self.env['stock.lot'].search([
+            ('name', '=', scanned_value),
+        ], limit=1)
+
+        if lot:
+            if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % scanned_value,
+                }
+
+            quants = self.env['stock.quant'].search([
+                ('lot_id', '=', lot.id),
+                ('quantity', '>', 0),
+            ])
+
+            quants = quants.filtered(lambda q: q.location_id and q.location_id.usage in ('internal', 'customer'))
+
+            if not quants:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no tiene existencia disponible.') % scanned_value,
+                }
+
+            quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+            source_location = quant.location_id
+
+            return {
+                'ok': True,
+                'scan_type': 'serial',
+                'serial': lot.name,
+                'lot_id': lot.id,
+                'product_id': lot.product_id.id,
+                'product': lot.product_id.display_name,
+                'source_location_id': source_location.id,
+                'source_location_name': source_location.display_name,
+                'message': _('Serial leído: %s | Origen: %s') % (
+                    lot.name,
+                    source_location.display_name,
+                ),
+            }
+
+        location = self.env['stock.location'].search([
+            ('barcode', '=', scanned_value),
+        ], limit=1)
+
+        if not location:
+            location = self.env['stock.location'].search([
+                ('name', '=', scanned_value),
+            ], limit=1)
+
+        if not location:
+            location = self.env['stock.location'].search([
+                ('complete_name', '=', scanned_value),
+            ], limit=1)
+
+        if location:
+            if location.usage != 'internal' or not location.is_trigas_truck_location:
+                return {
+                    'ok': False,
+                    'scan_type': 'location',
+                    'message': _('No es una ubicación de camión: %s') % location.display_name,
+                }
+
+            return {
+                'ok': True,
+                'scan_type': 'truck_location',
+                'location_id': location.id,
+                'location_name': location.display_name,
+                'message': _('Ubicación camión leída: %s') % location.display_name,
+            }
+
+        return {
+            'ok': False,
+            'message': _('No se encontró serial ni ubicación camión con la lectura: %s') % scanned_value,
+        }
+
+    @api.model
+    def trigas_pickup_create_and_validate_from_frontend(self, serial_names, truck_location_id):
+        serial_names = [s.strip() for s in (serial_names or []) if s and s.strip()]
+        serial_names = list(dict.fromkeys(serial_names))
+
+        if not serial_names:
+            return {
+                'ok': False,
+                'message': _('Debes leer al menos un serial.'),
+            }
+
+        truck_location = self.env['stock.location'].browse(truck_location_id).exists()
+
+        if not truck_location:
+            return {
+                'ok': False,
+                'message': _('No se encontró la ubicación camión.'),
+            }
+
+        if truck_location.usage != 'internal' or not truck_location.is_trigas_truck_location:
+            return {
+                'ok': False,
+                'message': _('La ubicación destino no es una ubicación camión válida.'),
+            }
+
+        picking_type = self.env.ref('trigas_4_conduces.picking_type_trigas_step_3', raise_if_not_found=False)
+
+        if not picking_type:
+            picking_type = self.env['stock.picking.type'].search([
+                ('sequence_code', '=', 'TRI3'),
+            ], limit=1)
+
+        if not picking_type:
+            return {
+                'ok': False,
+                'message': _('No se encontró el tipo de operación TRI3.'),
+            }
+
+        first_source = False
+        prepared = []
+
+        for serial_name in serial_names:
+            lot = self.env['stock.lot'].search([
+                ('name', '=', serial_name),
+            ], limit=1)
+
+            if not lot:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no existe en Odoo.') % serial_name,
+                }
+
+            if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name,
+                }
+
+            quants = self.env['stock.quant'].search([
+                ('lot_id', '=', lot.id),
+                ('quantity', '>', 0),
+            ])
+            quants = quants.filtered(lambda q: q.location_id and q.location_id.usage in ('internal', 'customer'))
+
+            if not quants:
+                return {
+                    'ok': False,
+                    'message': _('El serial %s no tiene existencia disponible.') % serial_name,
+                }
+
+            quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+            source_location = quant.location_id
+
+            if not first_source:
+                first_source = source_location
+
+            prepared.append((lot, source_location))
+
+        picking = self.env['stock.picking'].create({
+            'picking_type_id': picking_type.id,
+            'location_id': first_source.id,
+            'location_dest_id': truck_location.id,
+            'is_trigas_conduce': True,
+            'trigas_step': '3',
+            'trigas_truck_location_id': truck_location.id if 'trigas_truck_location_id' in self._fields else False,
+            'origin': _('Recogida PDA'),
+        })
+
+        moves_by_key = {}
+
+        for lot, source_location in prepared:
+            key = (lot.product_id.id, source_location.id)
+
+            move = moves_by_key.get(key)
+            if not move:
+                move = self.env['stock.move'].create({
+                    'name': lot.product_id.display_name,
+                    'product_id': lot.product_id.id,
+                    'product_uom_qty': 0.0,
+                    'product_uom': lot.product_id.uom_id.id,
+                    'picking_id': picking.id,
+                    'location_id': source_location.id,
+                    'location_dest_id': truck_location.id,
+                    'origin': picking.origin or picking.name,
+                })
+                moves_by_key[key] = move
+
+            move.product_uom_qty += 1.0
+
+            self.env['stock.move.line'].create({
+                'move_id': move.id,
+                'picking_id': picking.id,
+                'product_id': lot.product_id.id,
+                'product_uom_id': lot.product_id.uom_id.id,
+                'qty_done': 1.0,
+                'lot_id': lot.id,
+                'location_id': source_location.id,
+                'location_dest_id': truck_location.id,
+            })
+
+        if picking.state == 'draft':
+            picking.action_confirm()
+
+        # Importante: no dependemos de reserva para validar; las líneas ya tienen qty_done.
+        result = picking.button_validate()
+
+        if isinstance(result, dict):
+            # Si Odoo abre wizard de backorder/immediate transfer, lo dejamos informado.
+            return {
+                'ok': True,
+                'picking_id': picking.id,
+                'picking_name': picking.name,
+                'message': _('Recogida creada. Revisa la validación final de Odoo: %s') % picking.name,
+                'action': result,
+            }
+
+        return {
+            'ok': True,
+            'picking_id': picking.id,
+            'picking_name': picking.name,
+            'message': _('Recogida validada correctamente: %s') % picking.name,
+        }
+
+
+    def trigas_tri3_add_serial_real_location_line(self, serial_name):
+        self.ensure_one()
+
+        serial_name = (serial_name or '').strip()
+
+        if not serial_name:
+            return {
+                'ok': False,
+                'message': _('Lectura vacía.'),
+            }
+
+        if not self.picking_type_id or self.picking_type_id.sequence_code != 'TRI3':
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica a Recogida de Cilindros TRI3.'),
+            }
+
+        lot = self.env['stock.lot'].search([
+            ('name', '=', serial_name),
+        ], limit=1)
+
+        if not lot:
+            return {
+                'ok': False,
+                'message': _('No se encontró el serial: %s') % serial_name,
+            }
+
+        if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+            return {
+                'ok': False,
+                'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name,
+            }
+
+        duplicate_line = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+        )
+
+        if duplicate_line:
+            return {
+                'ok': False,
+                'message': _('El serial %s ya fue leído en esta recogida.') % serial_name,
+            }
+
+        quants = self.env['stock.quant'].search([
+            ('lot_id', '=', lot.id),
+            ('quantity', '>', 0),
+        ])
+
+        quants = quants.filtered(
+            lambda q: q.location_id
+            and q.location_id.usage in ('internal', 'customer')
+        )
+
+        if not quants:
+            return {
+                'ok': False,
+                'message': _('El serial %s no tiene existencia disponible.') % serial_name,
+            }
+
+        # Tomamos la ubicación real más reciente del serial.
+        quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+        source_location = quant.location_id
+        destination_location = self.location_dest_id or self.picking_type_id.default_location_dest_id
+
+        if not destination_location:
+            return {
+                'ok': False,
+                'message': _('Esta recogida no tiene ubicación destino definida.'),
+            }
+
+        # Si el picking está vacío, ajustar origen del encabezado para que Barcode renderice mejor.
+        if not self.move_line_ids:
+            self.write({
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+            })
+
+        if self.state == 'draft':
+            self.action_confirm()
+
+        # Crear un movimiento por serial para evitar agrupaciones incorrectas.
+        move = self.env['stock.move'].create({
+            'name': '%s - %s' % (lot.product_id.display_name, lot.name),
+            'product_id': lot.product_id.id,
+            'product_uom_qty': 1.0,
+            'product_uom': lot.product_id.uom_id.id,
+            'picking_id': self.id,
+            'location_id': source_location.id,
+            'location_dest_id': destination_location.id,
+            'origin': self.origin or self.name,
+        })
+
+        line = self.env['stock.move.line'].create({
+            'move_id': move.id,
+            'picking_id': self.id,
+            'product_id': lot.product_id.id,
+            'product_uom_id': lot.product_id.uom_id.id,
+            'lot_id': lot.id,
+            'qty_done': 1.0,
+            'location_id': source_location.id,
+            'location_dest_id': destination_location.id,
+        })
+
+        return {
+            'ok': True,
+            'message': _('Serial agregado: %(serial)s | Origen: %(src)s | Destino: %(dest)s') % {
+                'serial': lot.name,
+                'src': source_location.display_name,
+                'dest': destination_location.display_name,
+            },
+            'serial': lot.name,
+            'product': lot.product_id.display_name,
+            'source_location_id': source_location.id,
+            'source_location_name': source_location.display_name,
+            'destination_location_id': destination_location.id,
+            'destination_location_name': destination_location.display_name,
+            'move_id': move.id,
+            'move_line_id': line.id,
+        }
+
+
+    def trigas_tri3_validate_serial_frontend_only(self, serial_name):
+        self.ensure_one()
+
+        serial_name = (serial_name or '').strip()
+
+        if not serial_name:
+            return {
+                'ok': False,
+                'message': _('Lectura vacía.'),
+            }
+
+        if not self.picking_type_id or self.picking_type_id.sequence_code != 'TRI3':
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica a Recogida de Cilindros TRI3.'),
+            }
+
+        lot = self.env['stock.lot'].search([
+            ('name', '=', serial_name),
+        ], limit=1)
+
+        if not lot:
+            return {
+                'ok': False,
+                'message': _('No se encontró el serial: %s') % serial_name,
+            }
+
+        if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+            return {
+                'ok': False,
+                'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name,
+            }
+
+        quants = self.env['stock.quant'].search([
+            ('lot_id', '=', lot.id),
+            ('quantity', '>', 0),
+        ])
+
+        quants = quants.filtered(
+            lambda q: q.location_id
+            and q.location_id.usage in ('internal', 'customer')
+        )
+
+        if not quants:
+            return {
+                'ok': False,
+                'message': _('El serial %s no tiene existencia disponible.') % serial_name,
+            }
+
+        quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+        source_location = quant.location_id
+        destination_location = self.location_dest_id or self.picking_type_id.default_location_dest_id
+
+        if not destination_location:
+            return {
+                'ok': False,
+                'message': _('Esta recogida no tiene ubicación destino definida.'),
+            }
+
+        return {
+            'ok': True,
+            'serial': lot.name,
+            'lot_id': lot.id,
+            'product': lot.product_id.display_name,
+            'product_id': lot.product_id.id,
+            'source_location_id': source_location.id,
+            'source_location_name': source_location.display_name,
+            'destination_location_id': destination_location.id,
+            'destination_location_name': destination_location.display_name,
+            'message': _('Serial leído: %(serial)s | Origen: %(src)s') % {
+                'serial': lot.name,
+                'src': source_location.display_name,
+            },
+        }
+
+    def trigas_tri3_commit_frontend_serials(self, serial_names):
+        self.ensure_one()
+
+        serial_names = [s.strip() for s in (serial_names or []) if s and s.strip()]
+        serial_names = list(dict.fromkeys(serial_names))
+
+        if not serial_names:
+            return {
+                'ok': False,
+                'message': _('Debes leer al menos un serial antes de validar.'),
+            }
+
+        if not self.picking_type_id or self.picking_type_id.sequence_code != 'TRI3':
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica a Recogida de Cilindros TRI3.'),
+            }
+
+        destination_location = self.location_dest_id or self.picking_type_id.default_location_dest_id
+
+        if not destination_location:
+            return {
+                'ok': False,
+                'message': _('Esta recogida no tiene ubicación destino definida.'),
+            }
+
+        created_lines = []
+
+        # Limpieza defensiva: si había líneas nativas mal agrupadas en este picking de prueba,
+        # las eliminamos antes de crear las líneas reales desde frontend.
+        if self.state == 'draft':
+            self.move_line_ids.unlink()
+            self.move_ids_without_package.unlink()
+
+        first_source = False
+
+        for serial_name in serial_names:
+            lot = self.env['stock.lot'].search([
+                ('name', '=', serial_name),
+            ], limit=1)
+
+            if not lot:
+                raise UserError(_('No se encontró el serial: %s') % serial_name)
+
+            if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+                raise UserError(_('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name)
+
+            duplicate_line = self.move_line_ids.filtered(
+                lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+            )
+
+            if duplicate_line:
+                continue
+
+            quants = self.env['stock.quant'].search([
+                ('lot_id', '=', lot.id),
+                ('quantity', '>', 0),
+            ])
+
+            quants = quants.filtered(
+                lambda q: q.location_id
+                and q.location_id.usage in ('internal', 'customer')
+            )
+
+            if not quants:
+                raise UserError(_('El serial %s no tiene existencia disponible.') % serial_name)
+
+            quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+            source_location = quant.location_id
+
+            if not first_source:
+                first_source = source_location
+
+            move = self.env['stock.move'].create({
+                'name': '%s - %s' % (lot.product_id.display_name, lot.name),
+                'product_id': lot.product_id.id,
+                'product_uom_qty': 1.0,
+                'product_uom': lot.product_id.uom_id.id,
+                'picking_id': self.id,
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+                'origin': self.origin or self.name,
+            })
+
+            line = self.env['stock.move.line'].create({
+                'move_id': move.id,
+                'picking_id': self.id,
+                'product_id': lot.product_id.id,
+                'product_uom_id': lot.product_id.uom_id.id,
+                'lot_id': lot.id,
+                'qty_done': 1.0,
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+            })
+
+            created_lines.append(line.id)
+
+        if first_source and self.state == 'draft':
+            self.write({
+                'location_id': first_source.id,
+                'location_dest_id': destination_location.id,
+            })
+
+        if self.state == 'draft':
+            self.action_confirm()
+
+        result = self.button_validate()
+
+        if isinstance(result, dict):
+            return {
+                'ok': True,
+                'message': _('Seriales guardados. Odoo requiere una confirmación adicional.'),
+                'action': result,
+                'picking_id': self.id,
+                'picking_name': self.name,
+            }
+
+        return {
+            'ok': True,
+            'message': _('Recogida validada correctamente: %s') % self.name,
+            'picking_id': self.id,
+            'picking_name': self.name,
+            'created_line_ids': created_lines,
+        }
+
+
+
+    def trigas_tri3_add_serial_from_any_origin(self, serial_name):
+        self.ensure_one()
+
+        serial_name = (serial_name or '').strip()
+
+        if not serial_name:
+            return {
+                'ok': False,
+                'message': _('Lectura vacía.'),
+            }
+
+        if not self.picking_type_id or self.picking_type_id.sequence_code != 'TRI3':
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica a Recogida de Cilindros TRI3.'),
+            }
+
+        lot = self.env['stock.lot'].search([
+            ('name', '=', serial_name),
+        ], limit=1)
+
+        if not lot:
+            return {
+                'ok': False,
+                'message': _('No se encontró el serial: %s') % serial_name,
+            }
+
+        if not lot.product_id or not lot.product_id.product_tmpl_id.is_cylinder_conduce:
+            return {
+                'ok': False,
+                'message': _('El serial %s no pertenece a un producto marcado como cilindro Trigas.') % serial_name,
+            }
+
+        duplicate_line = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+        )
+
+        if duplicate_line:
+            return {
+                'ok': False,
+                'message': _('El serial %s ya fue leído en esta recogida.') % serial_name,
+            }
+
+        quants = self.env['stock.quant'].search([
+            ('lot_id', '=', lot.id),
+            ('quantity', '>', 0),
+        ])
+
+        quants = quants.filtered(
+            lambda q: q.location_id
+            and q.location_id.usage in ('internal', 'customer')
+        )
+
+        if not quants:
+            return {
+                'ok': False,
+                'message': _('El serial %s no tiene existencia disponible.') % serial_name,
+            }
+
+        # Ubicación real actual del serial.
+        quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+        source_location = quant.location_id
+        destination_location = self.location_dest_id or self.picking_type_id.default_location_dest_id
+
+        if not destination_location:
+            return {
+                'ok': False,
+                'message': _('Esta recogida no tiene ubicación destino definida.'),
+            }
+
+        # Si el picking está vacío, ajustamos el encabezado al primer origen real.
+        # Las líneas posteriores pueden tener otros orígenes.
+        if not self.move_line_ids and self.location_id.id != source_location.id:
+            self.write({
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+            })
+
+        # Usar/crear un move por producto + origen real + destino.
+        move = self.move_ids_without_package.filtered(
+            lambda m:
+                m.product_id.id == lot.product_id.id
+                and m.location_id.id == source_location.id
+                and m.location_dest_id.id == destination_location.id
+                and m.state not in ('done', 'cancel')
+        )[:1]
+
+        if not move:
+            move = self.env['stock.move'].create({
+                'name': lot.product_id.display_name,
+                'product_id': lot.product_id.id,
+                'product_uom_qty': 1.0,
+                'product_uom': lot.product_id.uom_id.id,
+                'picking_id': self.id,
+                'location_id': source_location.id,
+                'location_dest_id': destination_location.id,
+                'origin': self.origin or self.name,
+            })
+        else:
+            move.product_uom_qty = move.product_uom_qty + 1.0
+
+        if self.state == 'draft':
+            self.action_confirm()
+
+        # Releer move por si cambió de estado después de action_confirm.
+        move = self.env['stock.move'].browse(move.id).exists()
+
+        line = self.env['stock.move.line'].create({
+            'move_id': move.id,
+            'picking_id': self.id,
+            'product_id': lot.product_id.id,
+            'product_uom_id': lot.product_id.uom_id.id,
+            'lot_id': lot.id,
+            'qty_done': 1.0,
+            'location_id': source_location.id,
+            'location_dest_id': destination_location.id,
+        })
+
+        return {
+            'ok': True,
+            'message': _('Serial agregado: %(serial)s | Origen: %(src)s | Destino: %(dest)s') % {
+                'serial': lot.name,
+                'src': source_location.display_name,
+                'dest': destination_location.display_name,
+            },
+            'serial': lot.name,
+            'product': lot.product_id.display_name,
+            'source_location_id': source_location.id,
+            'source_location_name': source_location.display_name,
+            'destination_location_id': destination_location.id,
+            'destination_location_name': destination_location.display_name,
+            'move_id': move.id,
+            'move_line_id': line.id,
+        }
+
+
+
+    def trigas_tri3_set_truck_destination_from_barcode(self, location_barcode):
+        self.ensure_one()
+
+        location_barcode = (location_barcode or '').strip()
+
+        if not location_barcode:
+            return {
+                'ok': False,
+                'message': _('Lectura vacía.'),
+            }
+
+        if not self.picking_type_id or self.picking_type_id.sequence_code != 'TRI3':
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica a Recogida de Cilindros TRI3.'),
+            }
+
+        Location = self.env['stock.location']
+
+        location = Location.search([
+            ('barcode', '=', location_barcode),
+        ], limit=1)
+
+        if not location:
+            location = Location.search([
+                ('name', '=', location_barcode),
+            ], limit=1)
+
+        if not location:
+            location = Location.search([
+                ('complete_name', '=', location_barcode),
+            ], limit=1)
+
+        if not location:
+            return {
+                'ok': False,
+                'message': _('No se encontró la ubicación: %s') % location_barcode,
+            }
+
+        if location.usage != 'internal':
+            return {
+                'ok': False,
+                'message': _('La ubicación destino debe ser interna: %s') % location.display_name,
+            }
+
+        if not location.is_trigas_truck_location:
+            return {
+                'ok': False,
+                'message': _('No es una ubicación camión Trigas: %s') % location.display_name,
+            }
+
+        if not self.move_line_ids:
+            return {
+                'ok': False,
+                'message': _('Primero debes escanear al menos un serial antes de indicar el camión destino.'),
+            }
+
+        # En TRI3 cada línea puede tener un origen diferente.
+        # La ubicación leída representa el destino común: camión.
+        self.write({
+            'location_dest_id': location.id,
+            'trigas_truck_location_id': location.id if 'trigas_truck_location_id' in self._fields else False,
+        })
+
+        for move in self.move_ids_without_package:
+            if move.state not in ('done', 'cancel'):
+                move.location_dest_id = location.id
+
+        for line in self.move_line_ids:
+            if line.state not in ('done', 'cancel'):
+                line.location_dest_id = location.id
+
+        return {
+            'ok': True,
+            'message': _('Ubicación destino registrada: %s') % location.display_name,
+            'location_id': location.id,
+            'location_name': location.display_name,
+        }
+
+
+    def trigas_barcode_get_step_3_state(self):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        groups = self._trigas_get_step_3_pickup_groups()
+        truck_location = self.trigas_truck_location_id or False
+
+        return {
+            'ok': True,
+            'groups': groups,
+            'has_serials': bool(groups),
+            'truck_location_id': truck_location.id if truck_location else False,
+            'truck_location_name': truck_location.display_name if truck_location else '',
+            'has_truck': bool(truck_location),
+            'can_validate': bool(groups and truck_location),
+        }
+
+    def trigas_barcode_validate_step_3_from_pda(self):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        self._trigas_prepare_step_3_before_validate()
+
+        result = self.button_validate()
+
+        return {
+            'ok': True,
+            'picking_id': self.id,
+            'picking_name': self.name,
+            'state': self.state,
+            'message': _('Recogida validada correctamente: %s') % self.name,
+            'result': bool(result),
+        }
+
+    def trigas_barcode_cancel_step_3_from_pda(self):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_pickup_step():
+            return {
+                'ok': False,
+                'message': _('Este método solo aplica al Conduce de Recogida.'),
+            }
+
+        if self.state == 'done':
+            raise UserError(_('No puedes cancelar una recogida ya validada.'))
+
+        if self.state != 'cancel':
+            self.action_cancel()
+
+        return {
+            'ok': True,
+            'picking_id': self.id,
+            'picking_name': self.name,
+            'state': self.state,
+            'message': _('Recogida cancelada correctamente: %s') % self.name,
+        }
+
     def _trigas_prepare_step_1_before_validate(self):
         self.ensure_one()
 
@@ -841,6 +2451,20 @@ class StockPicking(models.Model):
 
         allowed_product_ids = allowed_moves.mapped('product_id').ids
         expected_qty = sum(allowed_moves.mapped('product_uom_qty'))
+
+        # TRIGAS FIX:
+        # En la PDA/Odoo Barcode los seriales del Conduce 1 pueden quedar con lot_id,
+        # pero qty_done = 0. Antes de validar, normalizamos esas líneas leídas
+        # para que Odoo las trate como cantidades procesadas.
+        serial_lines_to_normalize = self.move_line_ids.filtered(
+            lambda ml: (
+                ml.lot_id
+                and ml.product_id.id in allowed_product_ids
+                and ml.qty_done <= 0
+            )
+        )
+        for line in serial_lines_to_normalize:
+            line.qty_done = 1.0
 
         done_serial_lines = self.move_line_ids.filtered(
             lambda ml: ml.lot_id and ml.qty_done > 0
@@ -891,6 +2515,39 @@ class StockPicking(models.Model):
     def _trigas_prepare_step_2_before_validate(self):
         self.ensure_one()
 
+        # TRIGAS FIX CONDUCE 2:
+        # En la PDA/Odoo Barcode los seriales pueden quedar con lot_id pero qty_done = 0.
+        # También pueden duplicarse: una línea sin reserva y otra reservada.
+        # Antes de validar, dejamos una sola línea por serial, preferimos la reservada
+        # y marcamos qty_done = 1.0 para que Odoo valide la entrega real.
+        serial_lines = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id and ml.product_id.product_tmpl_id.is_cylinder_conduce
+        )
+
+        lines_by_lot = {}
+        for line in serial_lines:
+            lines_by_lot.setdefault(line.lot_id.id, self.env['stock.move.line'])
+            lines_by_lot[line.lot_id.id] |= line
+
+        lines_to_keep = self.env['stock.move.line']
+        lines_to_delete = self.env['stock.move.line']
+
+        for lot_id, lines in lines_by_lot.items():
+            sorted_lines = lines.sorted(
+                key=lambda ml: ((ml.reserved_uom_qty or 0.0), ml.id),
+                reverse=True,
+            )
+            keep_line = sorted_lines[:1]
+            lines_to_keep |= keep_line
+            lines_to_delete |= (sorted_lines - keep_line)
+
+        for line in lines_to_keep:
+            if line.qty_done <= 0:
+                line.qty_done = 1.0
+
+        if lines_to_delete:
+            lines_to_delete.unlink()
+
         done_serial_lines = self.move_line_ids.filtered(
             lambda ml: ml.lot_id and ml.qty_done > 0 and ml.product_id.product_tmpl_id.is_cylinder_conduce
         )
@@ -922,3 +2579,4 @@ class StockPicking(models.Model):
 
         for move_line in self.move_line_ids:
             move_line.location_dest_id = customer_location.id
+

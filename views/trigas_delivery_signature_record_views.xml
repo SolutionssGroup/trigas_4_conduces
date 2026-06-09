@@ -61,6 +61,14 @@
         <field name="name">Firmas de entrega</field>
         <field name="res_model">trigas.delivery.signature.record</field>
         <field name="view_mode">tree,form</field>
+        <field name="domain">[('picking_id.trigas_step', '=', '2')]</field>
+    </record>
+
+    <record id="action_trigas_receipt_signature_record" model="ir.actions.act_window">
+        <field name="name">Firmas de recibido</field>
+        <field name="res_model">trigas.delivery.signature.record</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('picking_id.trigas_step', '=', '3')]</field>
     </record>
 
     <menuitem id="menu_trigas_delivery_signature_root"
@@ -73,4 +81,10 @@
               parent="menu_trigas_delivery_signature_root"
               action="action_trigas_delivery_signature_record"
               sequence="10"/>
+
+    <menuitem id="menu_trigas_receipt_signature_record"
+              name="Firmas de recibido"
+              parent="menu_trigas_delivery_signature_root"
+              action="action_trigas_receipt_signature_record"
+              sequence="20"/>
 </odoo>

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
     <record id="mail_template_trigas_delivery_signature" model="mail.template">
-        <field name="name">Trigas - Firma de entrega Conduce 2</field>
+        <field name="name">Trigas - Firma de Conduce (Entrega / Recogida)</field>
         <field name="model_id" ref="stock.model_stock_picking"/>
-        <field name="subject">Firma de entrega - ${object.name}</field>
+        <field name="subject">Firma de ${'recogida' if object.trigas_step == '3' else 'entrega'} - ${object.name}</field>
         <field name="email_to">${object.partner_id.email or ''}</field>
         <field name="body_html" type="html">
             <div>
                 <p>Estimado/a ${object.partner_id.name or 'cliente'},</p>
 
-                <p>Compartimos la confirmación de entrega correspondiente al conduce <strong>${object.name}</strong>.</p>
+                <p>Compartimos la confirmación de ${'recogida' if object.trigas_step == '3' else 'entrega'} correspondiente al conduce <strong>${object.name}</strong>.</p>
 
                 <p>
                     <strong>Firmado por:</strong>

@@ -11,17 +11,17 @@
                         string="Firmar entrega"
                         type="object"
                         class="oe_highlight"
-                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', '!=', '2')]}"/>
+                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', 'not in', ['2', '3'])]}"/>
 
                 <button name="action_open_trigas_signature_record"
                         string="Ver registro firma"
                         type="object"
-                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', '!=', '2')]}"/>
+                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', 'not in', ['2', '3'])]}"/>
 
                 <button name="action_send_trigas_delivery_email"
                         string="Enviar firma al cliente"
                         type="object"
-                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', '!=', '2')]}"/>
+                        attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', 'not in', ['2', '3'])]}"/>
             </xpath>
 
             <xpath expr="//sheet" position="inside">
@@ -39,7 +39,7 @@
                 </group>
 
                 <group string="Firma de entrega"
-                       attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', '!=', '2')]}">
+                       attrs="{'invisible': ['|', ('is_trigas_conduce', '=', False), ('trigas_step', 'not in', ['2', '3'])]}">
                     <field name="trigas_delivery_signature_status" readonly="1"/>
                     <field name="trigas_delivery_signed_by" readonly="1"/>
                     <field name="trigas_delivery_signed_on" readonly="1"/>

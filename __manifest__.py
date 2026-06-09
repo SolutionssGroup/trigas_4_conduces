@@ -20,6 +20,7 @@
         'views/res_partner_views.xml',
         'views/sale_order_views.xml',
         'views/stock_picking_views.xml',
+        'views/stock_location_views.xml',
         'views/stock_barcode_action_views.xml',
         'views/trigas_delivery_signature_record_views.xml',
         'wizard/trigas_delivery_signature_wizard_view.xml',
@@ -28,7 +29,8 @@
     ],
     'assets': {
         'web.assets_backend': [
-            'trigas_4_conduces/static/src/js/trigas_barcode_picking_patch.js',
+            'trigas_4_conduces/static/src/scss/trigas_barcode_mobile.scss',
+                'trigas_4_conduces/static/src/js/trigas_barcode_picking_patch.js',
         ],
     },
     'post_init_hook': 'post_init_hook',

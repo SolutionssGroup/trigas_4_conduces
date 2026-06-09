@@ -45,6 +45,31 @@
         </field>
     </record>
 
+    <!-- CONDUCE 3 / RECOGIDA DE CILINDROS -->
+    <!-- Esta acción debe entrar al flujo Barcode/Kanban.
+         Si no hay pendientes, el backend crea un picking TRI3 y abre Barcode/PDA. -->
+    <record id="action_trigas_barcode_step_3" model="ir.actions.act_window">
+        <field name="name">Recogida de cilindros</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="view_id" ref="stock_barcode.stock_picking_kanban"/>
+        <field name="domain">
+            [
+                ('is_trigas_conduce', '=', True),
+                ('trigas_step', '=', '3'),
+                ('state', 'not in', ['done', 'cancel'])
+            ]
+        </field>
+        <field name="context">
+            {
+                'default_picking_type_id': ref('trigas_4_conduces.picking_type_trigas_step_3'),
+                'search_default_waiting': 1,
+                'contact_display': 'partner_address'
+            }
+        </field>
+        <field name="target">current</field>
+    </record>
+
     <!-- Mostrar orden de venta como dato principal en la tarjeta Kanban/PDA del Barcode -->
     <record id="view_trigas_barcode_picking_kanban_sale_order" model="ir.ui.view">
         <field name="name">stock.picking.kanban.trigas.sale.order.barcode</field>
@@ -57,6 +82,7 @@
             <xpath expr="//kanban" position="inside">
                 <field name="sale_order_id"/>
                 <field name="is_trigas_conduce"/>
+                <field name="location_id"/>
             </xpath>
 
             <!-- Reemplazar el título móvil: orden grande arriba, conduce pequeño debajo -->
@@ -74,6 +100,30 @@
                         <t t-esc="record.name.value"/>
                     </t>
                 </span>
+            </xpath>
+
+            <!-- Recogida de Cilindros (TRI3): pie de tarjeta amigable con el cliente/origen
+                 bien visible, el estado destacado con color y un botón de acción grande,
+                 fácil de tocar con el dedo en pantallas de PDA.
+                 Estos traslados son "nativos" (is_trigas_conduce = False, sin trigas_step),
+                 por lo que se identifican por su referencia WH/TRI3/..., igual que
+                 hace el JS del módulo para detectar la pantalla de Recogida de Cilindros. -->
+            <xpath expr="//div[hasclass('o_kanban_record_bottom')]" position="after">
+                <div t-if="record.name.value and record.name.value.indexOf('WH/TRI3/') !== -1"
+                     class="trigas-tri3-kanban-footer">
+                    <div class="trigas-tri3-kanban-footer-info">
+                        <span class="trigas-tri3-kanban-origin">
+                            <t t-esc="record.location_id.value"/>
+                        </span>
+                        <span t-attf-class="trigas-tri3-kanban-state trigas-tri3-state-#{record.state.raw_value}">
+                            <t t-esc="record.state.value"/>
+                        </span>
+                    </div>
+                    <button class="trigas-tri3-kanban-cta btn" name="action_open_picking_client_action" type="object">
+                        Procesar recogida
+                        <i class="fa fa-arrow-right" aria-hidden="true"/>
+                    </button>
+                </div>
             </xpath>
 
         </field>
