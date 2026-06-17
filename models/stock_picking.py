@@ -1104,11 +1104,31 @@ class StockPicking(models.Model):
 
         serial_names = clean_serials
 
-        # Borrar líneas hechas anteriores del conduce.
-        done_serial_lines = self.move_line_ids.filtered(
-            lambda ml: ml.lot_id and ml.qty_done > 0
+        allowed_moves = self.move_ids_without_package.filtered(
+            lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce
         )
-        done_serial_lines.unlink()
+        allowed_product_ids = allowed_moves.mapped('product_id').ids
+        expected_qty = int(sum(allowed_moves.mapped('product_uom_qty')))
+
+        if expected_qty and len(serial_names) > expected_qty:
+            raise UserError(_(
+                'No puedes guardar más seriales que la cantidad esperada. '
+                'Cantidad esperada: %s. Cantidad recibida: %s.'
+            ) % (expected_qty, len(serial_names)))
+
+        # TRI1 usa una lista seleccionada por PDA. Al reabrir o reservar, Odoo puede
+        # dejar líneas con lot_id y qty_done = 0; deben reemplazarse, no acumularse.
+        if self.is_trigas_conduce and self.trigas_step == '1':
+            old_serial_lines = self.move_line_ids.filtered(
+                lambda ml: ml.lot_id and (
+                    not allowed_product_ids or ml.product_id.id in allowed_product_ids
+                )
+            )
+        else:
+            old_serial_lines = self.move_line_ids.filtered(
+                lambda ml: ml.lot_id and ml.qty_done > 0
+            )
+        old_serial_lines.unlink()
 
         if not serial_names:
             if self.state not in ('done', 'cancel'):
@@ -2452,22 +2472,23 @@ class StockPicking(models.Model):
         allowed_product_ids = allowed_moves.mapped('product_id').ids
         expected_qty = sum(allowed_moves.mapped('product_uom_qty'))
 
-        # TRIGAS FIX:
-        # En la PDA/Odoo Barcode los seriales del Conduce 1 pueden quedar con lot_id,
-        # pero qty_done = 0. Antes de validar, normalizamos esas líneas leídas
-        # para que Odoo las trate como cantidades procesadas.
-        serial_lines_to_normalize = self.move_line_ids.filtered(
+        # Las líneas con lot_id pero qty_done = 0 son reservas/restos viejos, no lecturas PDA.
+        # Si se convierten a hechas, contaminan el conteo y bloquean la validación.
+        stale_serial_lines = self.move_line_ids.filtered(
             lambda ml: (
                 ml.lot_id
                 and ml.product_id.id in allowed_product_ids
                 and ml.qty_done <= 0
             )
         )
-        for line in serial_lines_to_normalize:
-            line.qty_done = 1.0
+        stale_serial_lines.unlink()
 
         done_serial_lines = self.move_line_ids.filtered(
-            lambda ml: ml.lot_id and ml.qty_done > 0
+            lambda ml: (
+                ml.lot_id
+                and ml.product_id.id in allowed_product_ids
+                and ml.qty_done > 0
+            )
         )
 
         if not done_serial_lines:
@@ -2579,4 +2600,3 @@ class StockPicking(models.Model):
 
         for move_line in self.move_line_ids:
             move_line.location_dest_id = customer_location.id
-

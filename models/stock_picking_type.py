@@ -82,13 +82,55 @@ class StockPickingType(models.Model):
         if empty_drafts:
             empty_drafts.unlink()
 
+    def _compute_picking_count(self):
+        super()._compute_picking_count()
+
+        tri1_types = self.filtered(lambda picking_type: picking_type._trigas_is_tri1_type())
+        if not tri1_types:
+            return
+
+        data = self.env['stock.picking']._read_group([
+            ('picking_type_id', 'in', tri1_types.ids),
+            ('state', 'in', ['confirmed', 'assigned']),
+        ], ['picking_type_id'], ['picking_type_id'])
+
+        count_by_type = {
+            row['picking_type_id'][0]: row['picking_type_id_count']
+            for row in data if row['picking_type_id']
+        }
+
+        for picking_type in tri1_types:
+            picking_type.count_picking_ready = count_by_type.get(picking_type.id, 0)
+
     def get_action_picking_tree_ready_kanban(self):
         self.ensure_one()
 
-        # TRI1 / Entrega a Camión y TRI2 / Entrega a Cliente:
+        def _trigas_get_barcode_list_action():
+            action = super(StockPickingType, self).get_action_picking_tree_ready_kanban()
+            if isinstance(action, dict):
+                ctx = dict(action.get('context') or {})
+                ctx.pop('search_default_to_do_transfers', None)
+                action['context'] = ctx
+            return action
+
+        # TRI1 / Entrega a Camión:
+        # debe listar confirmados y preparados, aunque Odoo todavía no haya reservado seriales.
+        if self._trigas_is_tri1_type():
+            action = _trigas_get_barcode_list_action()
+            if isinstance(action, dict):
+                ctx = dict(action.get('context') or {})
+                ctx.pop('search_default_available', None)
+                action['context'] = ctx
+                action['domain'] = [
+                    ('picking_type_id', '=', self.id),
+                    ('state', 'in', ['confirmed', 'assigned']),
+                ]
+            return action
+
+        # TRI2 / Entrega a Cliente:
         # siempre deben abrir lista de pickings. Nunca crear automático.
-        if self._trigas_is_tri1_type() or self._trigas_is_tri2_type():
-            return super().get_action_picking_tree_ready_kanban()
+        if self._trigas_is_tri2_type():
+            return _trigas_get_barcode_list_action()
 
         # Transferencias Internas y TRI3:
         # si no hay pendientes, crear picking vacío y abrir Barcode directo.

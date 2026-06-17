@@ -30,7 +30,12 @@
     'assets': {
         'web.assets_backend': [
             'trigas_4_conduces/static/src/scss/trigas_barcode_mobile.scss',
-                'trigas_4_conduces/static/src/js/trigas_barcode_picking_patch.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_common.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_tri1.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_tri2.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_tri3.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_internal.js',
+            'trigas_4_conduces/static/src/js/trigas_barcode_picking_patch.js',
         ],
     },
     'post_init_hook': 'post_init_hook',

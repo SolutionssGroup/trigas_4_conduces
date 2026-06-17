@@ -9,13 +9,77 @@ import GroupedLineComponent from '@stock_barcode/components/grouped_line';
 import { patch } from '@web/core/utils/patch';
 import { _t } from '@web/core/l10n/translation';
 
+/* =========================================================
+   TRIGAS FASE 0 - GLOBAL / NAVEGACION / HELPERS
+   Comentarios de separacion solamente. No tocar logica aqui.
+   ========================================================= */
+
 const originalAskBeforeAddProduct = BarcodePickingModel.prototype._askBeforeAddProduct;
 const originalLoadData = BarcodePickingModel.prototype._loadData;
 const originalLoad = BarcodePickingModel.prototype.load;
 const originalRefresh = BarcodePickingModel.prototype.refresh;
 
-function trigasGoToOperaciones() {
-    window.location.href = '/web#action=407&model=stock.picking.type&view_type=kanban&menu_id=246&cids=1';
+function trigasGetCurrentBarcodePickingNameSafe() {
+    const text = String((document.body && document.body.innerText) || '');
+    const match = text.match(/WH\/(?:TRI1|TRI2|TRI3|INT)\/[0-9]+/i);
+    return match ? match[0] : '';
+}
+
+function trigasGoToBarcodeOperations(envOrComponent) {
+    const targetUrl = '/web#action=377&model=stock.picking.type&view_type=kanban&menu_id=219&cids=1';
+    const pickingName = trigasGetCurrentBarcodePickingNameSafe();
+
+    if (/WH\/TRI1\//i.test(pickingName)) {
+        console.log('TRIGAS TRI1 POST VALIDATE NAV', {
+            pickingName,
+            currentHash: window.location.hash,
+            currentPath: window.location.href,
+            target: 'barcode_operations',
+            targetAction: 377,
+            targetMenu: 219,
+        });
+    }
+
+    /*
+     * TRIGAS:
+     * Volver a Codigo de Barras / Operaciones sin depender del menu anterior.
+     * Primero intenta usar el action service interno de Odoo.
+     * Si no esta disponible, usa un fallback explicito a action=377/menu_id=219.
+     */
+    try {
+        const barcodeEl = document.querySelector('.o_barcode_client_action');
+        const owlComponent = barcodeEl && barcodeEl.__owl__ && barcodeEl.__owl__.component;
+
+        const actionService =
+            (envOrComponent && envOrComponent.actionService) ||
+            (envOrComponent && envOrComponent.env && envOrComponent.env.services && envOrComponent.env.services.action) ||
+            (envOrComponent && envOrComponent.services && envOrComponent.services.action) ||
+            (owlComponent && owlComponent.actionService) ||
+            (owlComponent && owlComponent.env && owlComponent.env.services && owlComponent.env.services.action);
+
+        if (actionService && typeof actionService.doAction === 'function') {
+            console.log('TRIGAS: volviendo a Codigo de Barras / Operaciones via actionService.doAction', {
+                action: 377,
+                menu_id: 219,
+            });
+            actionService.doAction(377, {
+                clearBreadcrumbs: true,
+            });
+            return;
+        }
+
+        console.log('TRIGAS: actionService no disponible, usando fallback href explicito', {
+            targetUrl,
+        });
+    } catch (error) {
+        console.log('TRIGAS: error usando actionService, usando fallback href', error);
+    }
+
+    window.location.href = targetUrl;
+}
+
+function trigasGoToOperaciones(envOrComponent) {
+    return trigasGoToBarcodeOperations(envOrComponent);
 }
 
 // Limpieza global del botón de firma Trigas.
@@ -81,36 +145,23 @@ function trigasCleanBarcodeDataSafe(barcodeData) {
 }
 
 function trigasGetLocationDisplayNameSafe(location) {
-    return (
-        location?.display_name ||
-        location?.name ||
-        location?.complete_name ||
-        'Ubicación'
-    );
+    return window.TrigasBarcodeCommon.getLocationDisplayNameSafe(location);
 }
 
 function trigasGetErrorMessageSafe(error, fallbackMessage) {
-    return (
-        error?.data?.message ||
-        error?.data?.arguments?.[0] ||
-        error?.message ||
-        fallbackMessage
-    );
+    return window.TrigasBarcodeCommon.getErrorMessageSafe(error, fallbackMessage);
 }
 
 function trigasIsInternalLocationSafe(location) {
-    return !!(location && location.usage === 'internal');
+    return window.TrigasBarcodeCommon.isInternalLocationSafe(location);
 }
 
 function trigasIsCustomerLocationSafe(location) {
-    return !!(location && location.usage === 'customer');
+    return window.TrigasBarcodeCommon.isCustomerLocationSafe(location);
 }
 
 function trigasGetScannedLocationSafe(barcodeData) {
-    if (!barcodeData) {
-        return false;
-    }
-    return barcodeData.destLocation || barcodeData.location || false;
+    return window.TrigasBarcodeCommon.getScannedLocationSafe(barcodeData);
 }
 
 function trigasGetStepFromRecordSafe(model) {
@@ -256,6 +307,11 @@ function trigasHighlightAndScrollLastScannedLine() {
 
     scrollParent.scrollTop += delta;
 }
+
+/* =========================================================
+   TRIGAS FASE 0 - GLOBAL / TRI1 / TRI2 / TRI3 / TRANSFERENCIA INTERNA
+   Parche principal de BarcodePickingModel. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
 
 patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
@@ -1108,6 +1164,11 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
             );
 
             if (result && result.location_name) {
+                if (this.params && this.params.id) {
+                    window.sessionStorage.setItem('trigas_int_destination_read_' + this.params.id, '1');
+                    window.sessionStorage.setItem('trigas_int_destination_name_' + this.params.id, result.location_name);
+                }
+
                 await this._trigasApplyDisplayOverride(location, barcodeData);
                 return result;
             }
@@ -1450,6 +1511,27 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
                 return false;
             }
 
+            const tri2SerialName = (
+                parsedBarcodeData.lot.name ||
+                parsedBarcodeData.lot.display_name ||
+                parsedBarcodeData.lot.barcode ||
+                barcode ||
+                ''
+            ).toString().trim();
+            const tri2ExpectedQty = window.TrigasBarcodeTri2
+                ? window.TrigasBarcodeTri2.getExpectedQty()
+                : 0;
+            const tri2SessionValidation = window.TrigasBarcodeTri2
+                ? window.TrigasBarcodeTri2.canAcceptSerial(tri2SerialName, tri2ExpectedQty)
+                : { ok: true };
+            if (!tri2SessionValidation.ok) {
+                this.notification.add(tri2SessionValidation.message, { type: 'danger' });
+                if (window.TrigasBarcodeTri2) {
+                    window.TrigasBarcodeTri2.renderSessionSerials({ expectedQty: tri2ExpectedQty });
+                }
+                return false;
+            }
+
             const validStep2 = await this._trigasValidateStep2Serial(parsedBarcodeData.lot.id);
             if (!validStep2) {
                 return false;
@@ -1502,6 +1584,19 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
         if (parsedBarcodeData?.lot?.id) {
             this._trigasMarkLastScannedLineVisual();
+        }
+
+        if (step === '2' && parsedBarcodeData?.lot?.id && window.TrigasBarcodeTri2) {
+            const tri2SerialName = (
+                parsedBarcodeData.lot.name ||
+                parsedBarcodeData.lot.display_name ||
+                parsedBarcodeData.lot.barcode ||
+                barcode ||
+                ''
+            ).toString().trim();
+            window.TrigasBarcodeTri2.recordSerial(tri2SerialName, {
+                expectedQty: window.TrigasBarcodeTri2.getExpectedQty(),
+            });
         }
 
         return result;
@@ -1565,6 +1660,26 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
 
         if (step === '2' && barcodeData?.lot?.id) {
+            const tri2SerialName = (
+                barcodeData.lot.name ||
+                barcodeData.lot.display_name ||
+                barcodeData.lot.barcode ||
+                ''
+            ).toString().trim();
+            const tri2ExpectedQty = window.TrigasBarcodeTri2
+                ? window.TrigasBarcodeTri2.getExpectedQty()
+                : 0;
+            const tri2SessionValidation = window.TrigasBarcodeTri2
+                ? window.TrigasBarcodeTri2.canAcceptSerial(tri2SerialName, tri2ExpectedQty)
+                : { ok: true };
+            if (!tri2SessionValidation.ok) {
+                this.notification.add(tri2SessionValidation.message, { type: 'danger' });
+                if (window.TrigasBarcodeTri2) {
+                    window.TrigasBarcodeTri2.renderSessionSerials({ expectedQty: tri2ExpectedQty });
+                }
+                return false;
+            }
+
             const validStep2 = await this._trigasValidateStep2Serial(barcodeData.lot.id);
             if (!validStep2) {
                 return false;
@@ -1607,6 +1722,18 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
         if (barcodeData?.lot?.id) {
             this._trigasMarkLastScannedLineVisual();
+        }
+
+        if (step === '2' && barcodeData?.lot?.id && window.TrigasBarcodeTri2) {
+            const tri2SerialName = (
+                barcodeData.lot.name ||
+                barcodeData.lot.display_name ||
+                barcodeData.lot.barcode ||
+                ''
+            ).toString().trim();
+            window.TrigasBarcodeTri2.recordSerial(tri2SerialName, {
+                expectedQty: window.TrigasBarcodeTri2.getExpectedQty(),
+            });
         }
 
         return result;
@@ -1712,6 +1839,116 @@ patch(LineComponent.prototype, 'trigas_4_conduces.LineComponent', {
 });
 
 
+/* =========================================================
+   TRIGAS FASE 0 - GLOBAL / OBSERVERS / INTERVALS
+   Scope visual de pantallas barcode. Comentarios solamente.
+   ========================================================= */
+
+function trigasIsBarcodeOperationsMenuScreen() {
+    if (!document.body) {
+        return false;
+    }
+
+    const hash = String(window.location.hash || '').toLowerCase();
+    const href = String(window.location.href || '').toLowerCase();
+    const route = href + ' ' + hash;
+    const bodyText = String(document.body.innerText || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    if (!route.includes('model=stock.picking.type')) {
+        return false;
+    }
+
+    if (
+        bodyText.includes('resumen de inventario') ||
+        route.includes('menu_id=174') ||
+        route.includes('action=341')
+    ) {
+        return false;
+    }
+
+    if (
+        route.includes('menu_id=219') ||
+        route.includes('action=377') ||
+        route.includes('action=407')
+    ) {
+        return true;
+    }
+
+    return (
+        bodyText.includes('operaciones') &&
+        bodyText.includes('entrega a camion') &&
+        bodyText.includes('recogida de cilindros') &&
+        !bodyText.includes('resumen de inventario')
+    );
+}
+
+function trigasIsStockPickingTypeKanbanRoute() {
+    const href = String(window.location.href || '').toLowerCase();
+    const hash = String(window.location.hash || '').toLowerCase();
+    const route = href + ' ' + hash;
+    return route.includes('model=stock.picking.type');
+}
+
+function trigasIsInventoryOverviewScreen() {
+    if (!document.body) {
+        return false;
+    }
+
+    const href = String(window.location.href || '').toLowerCase();
+    const hash = String(window.location.hash || '').toLowerCase();
+    const route = href + ' ' + hash;
+    const text = String(document.body.innerText || '').toLowerCase();
+
+    return (
+        route.includes('model=stock.picking.type') &&
+        (
+            route.includes('menu_id=174') ||
+            route.includes('action=341') ||
+            text.includes('resumen de inventario')
+        )
+    );
+}
+
+function trigasClearPickingListBodyClassesSafe() {
+    if (!document.body) {
+        return;
+    }
+
+    document.body.classList.remove(
+        'trigas-tri1-list-active',
+        'trigas-tri2-list-active',
+        'trigas-tri3-list-active',
+        'trigas-internal-list-active',
+        'trigas-picking-list-screen'
+    );
+}
+
+function trigasRestoreNativePickingTypeKanbanSafe() {
+    if (!document.body) {
+        return;
+    }
+
+    document.body.classList.remove(
+        'trigas-barcode-operational-screen',
+        'trigas-barcode-main-menu-screen',
+        'trigas-barcode-route-pending'
+    );
+    trigasClearPickingListBodyClassesSafe();
+
+    document.querySelectorAll('.o_kanban_view, .o_kanban_renderer, .o_kanban_record').forEach((el) => {
+        el.style.display = '';
+        el.style.opacity = '';
+        el.style.visibility = '';
+        el.style.height = '';
+        el.style.minHeight = '';
+        el.style.overflow = '';
+        el.style.pointerEvents = '';
+    });
+}
+
 /**
  * TRIGAS PDA:
  * Activa estilos visuales SOLO en pantallas de Código de barras Trigas.
@@ -1731,6 +1968,7 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
 
     const hash = (window.location.hash || '').toLowerCase();
     const href = (window.location.href || '').toLowerCase();
+    const isPickingTypeOperationsScreen = trigasIsStockPickingTypeKanbanRoute();
 
     const isBarcodeMenu = (
         normalizedText.includes('codigo de barras') ||
@@ -1739,12 +1977,29 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
     );
 
     const hasBarcodeClientAction = !!document.querySelector('.o_barcode_client_action');
+    const isBarcodeOperationsMenuScreen = trigasIsBarcodeOperationsMenuScreen();
+
+    if (isBarcodeOperationsMenuScreen && !hasBarcodeClientAction) {
+        trigasClearPickingListBodyClassesSafe();
+        document.body.classList.add('trigas-barcode-operational-screen');
+        document.body.classList.add('trigas-barcode-main-menu-screen');
+        document.body.classList.remove(
+            'trigas-barcode-route-pending'
+        );
+        return;
+    }
+
+    if (isPickingTypeOperationsScreen && !hasBarcodeClientAction) {
+        trigasRestoreNativePickingTypeKanbanSafe();
+        return;
+    }
 
     // Listado de traslados pendientes de "Recogida de Cilindros": se integra
     // al mismo diseño amigable que Entrega a Camión / Entrega a Cliente.
     // La condición requiere texto visible ("recogida de cilindros") para no
     // activarse en action=406 mostrando pickings TRI1/TRI2.
     const isTri3ListScreen = (
+        !isPickingTypeOperationsScreen &&
         !hasBarcodeClientAction &&
         (
             normalizedText.includes('recogida de cilindros') ||
@@ -1805,6 +2060,16 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
         'trigas-tri3-list-active',
         isTri3ListScreen && !isNativeInternalTransferScreen
     );
+
+    if (isPickingTypeOperationsScreen) {
+        document.body.classList.remove(
+            'trigas-tri1-list-active',
+            'trigas-tri2-list-active',
+            'trigas-tri3-list-active',
+            'trigas-internal-list-active',
+            'trigas-picking-list-screen'
+        );
+    }
 }
 
 function trigasStartBarcodeVisualScopeSafe() {
@@ -1844,6 +2109,11 @@ if (document.readyState === 'loading') {
 
 
 
+
+/* =========================================================
+   TRIGAS FASE 0 - LISTAS / CONTADORES
+   Render y contador visual de seriales. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
 
 function trigasUpdateVisualQtyCounterFromSerials(serialCount) {
     const root = document.querySelector('.o_barcode_client_action');
@@ -2076,6 +2346,11 @@ async function trigasRenderStandaloneSerialListForPda() {
 
 
 /* =========================================================
+   TRIGAS FASE 0 - TRI1 / LISTAS / CONTADORES
+   Seriales temporales frontend y retorno a Operaciones.
+   ========================================================= */
+
+/* =========================================================
    TRIGAS PDA - Seriales temporales en frontend
    Escanear/Borrar rápido. Guardar al salir o validar.
    ========================================================= */
@@ -2133,6 +2408,52 @@ function trigasTempGetExpectedQty() {
 
     return 0;
 }
+
+function trigasTri1IsActive() {
+    return window.TrigasBarcodeTri1.trigasTri1IsActive();
+}
+
+function trigasTri1ScanLogKey() {
+    return window.TrigasBarcodeTri1.trigasTri1ScanLogKey({
+        getPickingId: trigasTempGetPickingId,
+    });
+}
+
+function trigasTri1GetScanLog() {
+    return window.TrigasBarcodeTri1.trigasTri1GetScanLog({
+        getPickingId: trigasTempGetPickingId,
+    });
+}
+
+function trigasTri1SetScanLog(items) {
+    return window.TrigasBarcodeTri1.trigasTri1SetScanLog(items, {
+        getPickingId: trigasTempGetPickingId,
+    });
+}
+
+function trigasTri1AddScanLog(value, status, message) {
+    return window.TrigasBarcodeTri1.trigasTri1AddScanLog(value, status, message, {
+        getPickingId: trigasTempGetPickingId,
+        findProductLine: trigasTempFindProductLineSafe,
+    });
+}
+
+function trigasTri1ClearScanLog() {
+    return window.TrigasBarcodeTri1.trigasTri1ClearScanLog({
+        getPickingId: trigasTempGetPickingId,
+        findProductLine: trigasTempFindProductLineSafe,
+    });
+}
+
+function trigasTri1RenderScanLog() {
+    return window.TrigasBarcodeTri1.trigasTri1RenderScanLog({
+        getPickingId: trigasTempGetPickingId,
+        findProductLine: trigasTempFindProductLineSafe,
+    });
+}
+
+window.trigasTri1AddScanLog = trigasTri1AddScanLog;
+window.trigasTri1RenderScanLog = trigasTri1RenderScanLog;
 
 function trigasTempUpdateCounter(serialCount) {
     const root = document.querySelector('.o_barcode_client_action');
@@ -2414,6 +2735,9 @@ try {
     if (typeof trigasTempGetSerials === 'function') {
         window.trigasTempGetSerials = trigasTempGetSerials;
     }
+    if (typeof trigasTempSetSerials === 'function') {
+        window.trigasTempSetSerials = trigasTempSetSerials;
+    }
     if (typeof trigasTempRenderSerialList === 'function') {
         window.trigasTempRenderSerialList = trigasTempRenderSerialList;
     }
@@ -2426,6 +2750,11 @@ try {
     console.log('TRIGAS TEMP FRONTEND NO DISPONIBLE', error);
 }
 
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI1 / OBSERVERS / INTERVALS
+   Captura directa de scanner tipo teclado. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
 
 /* =========================================================
    TRIGAS PDA - Captura directa de escáner tipo teclado
@@ -2638,6 +2967,7 @@ async function trigasTempAddSerialFromScanner(serialName) {
 
     if (serials.includes(serialName)) {
         trigasTempShowPdaMessage('El serial ' + serialName + ' ya fue leído.', 'error');
+        trigasTri1AddScanLog(serialName, 'duplicate', 'Serial ya fue leído');
         trigasTempRenderSerialListSafe(true);
         return true;
     }
@@ -2646,6 +2976,7 @@ async function trigasTempAddSerialFromScanner(serialName) {
 
     if (expectedQty && serials.length >= expectedQty) {
         trigasTempShowPdaMessage('Ya se leyó la cantidad completa esperada.', 'error');
+        trigasTri1AddScanLog(serialName, 'blocked', 'Bloqueado: cantidad completa');
         trigasTempRenderSerialListSafe(true);
         return true;
     }
@@ -2662,6 +2993,7 @@ async function trigasTempAddSerialFromScanner(serialName) {
 
     if (!validation.ok) {
         trigasTempShowPdaMessage(validation.message || 'Serial no válido para este conduce.', 'error');
+        trigasTri1AddScanLog(serialName, 'error', validation.message || 'Serial no válido');
         return false;
     }
 
@@ -2671,6 +3003,9 @@ async function trigasTempAddSerialFromScanner(serialName) {
 
     if (expectedQty && serials.length >= expectedQty) {
         trigasTempShowPdaMessage('Cantidad completa leída.', 'success');
+        trigasTri1AddScanLog(serialName, 'ok', 'Leído correcto');
+    } else {
+        trigasTri1AddScanLog(serialName, 'ok', 'Leído correcto');
     }
 
     console.log('TRIGAS TEMP: serial agregado en frontend', serialName, serials);
@@ -2684,7 +3019,7 @@ if (!window.__trigasKeyboardScannerCaptureStarted) {
     window.__trigasKeyboardScannerBuffer = '';
     window.__trigasKeyboardScannerLastKeyTime = 0;
 
-    document.addEventListener('keydown', (event) => {
+    document.addEventListener('keydown', async (event) => {
         if (!document.body || !document.body.classList.contains('trigas-barcode-operational-screen')) {
             return;
         }
@@ -2710,6 +3045,75 @@ if (!window.__trigasKeyboardScannerCaptureStarted) {
                 event.stopPropagation();
                 event.stopImmediatePropagation();
 
+                // No interferir con TRI3
+                if (
+                    window.location.href.includes('WH/TRI3/') ||
+                    (window.location.hash.includes('active_id=') && document.body && (document.body.innerText || '').includes('WH/TRI3/'))
+                ) {
+                    return;
+                }
+
+                // Guardia fuerte: si ya se leyó la cantidad esperada, intentar validar
+                // si se trata de una ubicación destino; en caso contrario bloquear el serial extra.
+                try {
+                    const expectedQty = (typeof trigasTempGetExpectedQty === 'function') ? trigasTempGetExpectedQty() : 0;
+                    const serials = (typeof trigasTempGetSerials === 'function') ? trigasTempGetSerials() : [];
+
+                    if (expectedQty && serials.length >= expectedQty) {
+                        let destinationValidation = { ok: false, is_location: false };
+
+                        try {
+                            if (typeof trigasTempValidateDestinationInBackend === 'function') {
+                                destinationValidation = await trigasTempValidateDestinationInBackend(scanned);
+                            }
+                        } catch (err) {
+                            console.log('TRIGAS TEMP: error validando destino en keydown', err);
+                        }
+
+                        if (destinationValidation && destinationValidation.ok && destinationValidation.is_location) {
+                            try {
+                                if (typeof trigasTempSetDestinationRead === 'function') {
+                                    trigasTempSetDestinationRead(true);
+                                }
+                                if (typeof trigasTempSetDestinationName === 'function') {
+                                    trigasTempSetDestinationName(destinationValidation.location_name || destinationValidation.destination_name || destinationValidation.location || scanned);
+                                }
+                                if (typeof trigasTempShowPdaMessage === 'function') {
+                                    trigasTempShowPdaMessage(destinationValidation.message || 'Ubicación destino confirmada.', 'success');
+                                }
+                                if (typeof window.trigasTempRenderSerialListSafe === 'function') {
+                                    window.trigasTempRenderSerialListSafe(false);
+                                }
+                                if (typeof trigasTempRefreshValidateState === 'function') {
+                                    trigasTempRefreshValidateState();
+                                }
+                                trigasTri1AddScanLog(scanned, 'location', 'Ubicación destino leída');
+                            } catch (e) {
+                                console.log('TRIGAS TEMP: error aplicando destino tras validación', e);
+                            }
+
+                            return;
+                        }
+
+                        // No es ubicación válida -> bloquear como serial extra
+                        if (typeof trigasTempShowPdaMessage === 'function') {
+                            trigasTempShowPdaMessage('Lea la ubicacion destino', 'error');
+                        }
+                        trigasTri1AddScanLog(scanned, 'blocked', 'Bloqueado: cantidad completa');
+                        if (typeof window.trigasTempRenderSerialListSafe === 'function') {
+                            window.trigasTempRenderSerialListSafe(true);
+                        }
+                        if (typeof trigasTempRefreshValidateState === 'function') {
+                            trigasTempRefreshValidateState();
+                        }
+
+                        return;
+                    }
+                } catch (e) {
+                    console.log('TRIGAS TEMP: error en guard keydown', e);
+                }
+
+                // Si no entró en la compuerta, procesar como serial normal
                 trigasTempHandleFinalScan(scanned);
             }
 
@@ -2751,6 +3155,11 @@ try {
     console.log('TRIGAS TEMP: no se pudo neutralizar render viejo', error);
 }
 
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI1 / LISTAS / CONTADORES
+   Flujo final frontend: seriales, destino y bloqueo visual de validar.
+   ========================================================= */
 
 /* =========================================================
    TRIGAS PDA - Flujo final:
@@ -3065,6 +3474,7 @@ async function trigasTempHandleFinalScan(scannedValue) {
         if (destinationValidation.ok && destinationValidation.is_location) {
             trigasTempSetDestinationRead(true);
             trigasTempShowPdaMessage(destinationValidation.message || 'Ubicación destino confirmada.', 'success');
+            trigasTri1AddScanLog(scannedValue, 'location', 'Ubicación destino leída');
             window.trigasTempRenderSerialListSafe(false);
             return true;
         }
@@ -3072,12 +3482,28 @@ async function trigasTempHandleFinalScan(scannedValue) {
         // Si ya está completo y lee otra cosa que no es ubicación, mostramos error.
         trigasTempSetDestinationRead(false);
         trigasTempShowPdaMessage(
-            destinationValidation.message || ('No es una ubicación de camión: ' + scannedValue),
+            'Ya se completaron los ' + expectedQty + ' seriales esperados. Elimine uno si desea cambiarlo.',
             'error'
         );
         window.trigasTempRenderSerialListSafe(false);
         trigasTempRefreshValidateState();
         return false;
+    }
+
+    if (complete) {
+        if (typeof trigasTempShowPdaMessage === 'function') {
+            trigasTempShowPdaMessage('Ya se leyó la cantidad completa esperada.', 'error');
+        }
+
+        if (typeof window.trigasTempRenderSerialListSafe === 'function') {
+            window.trigasTempRenderSerialListSafe(false);
+        }
+
+        if (typeof trigasTempRefreshValidateState === 'function') {
+            trigasTempRefreshValidateState();
+        }
+
+        return true;
     }
 
     // Antes de completar, todo lo que lee se trata como serial.
@@ -3159,6 +3585,11 @@ if (!window.__trigasFinalValidateBlockStarted) {
     }, true);
 }
 
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI1 / LISTAS / CONTADORES
+   Parche final operativo acumulado. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
 
 /* =========================================================
    TRIGAS PDA - PARCHE FINAL DE FLUJO OPERATIVO
@@ -4465,6 +4896,65 @@ window.trigasTempRenderSerialListSafe = function (forceExpanded = false) {
     if (typeof trigasFinalRefreshState === 'function') {
         trigasFinalRefreshState();
     }
+
+    if (typeof trigasTri1RenderScanLog === 'function') {
+        trigasTri1RenderScanLog();
+    }
+
+    // Inyectar el botón "Limpiar lista" dentro de cada .trigas-simple-serial-list
+    // Solo insertar si existe el despliegue (toggle y list) y evitar duplicados.
+    try {
+        // Solo inyectar en la pantalla de Barcode Trigas (TRI1). Evitar TRI3.
+        if (!document.body || !document.body.classList.contains('trigas-barcode-operational-screen') || document.body.classList.contains('trigas-tri3-active') || document.body.classList.contains('trigas-tri3-native-screen')) {
+            // no estamos en la pantalla TRI1 relevante
+        } else {
+            const serialBoxes = document.querySelectorAll('.trigas-simple-serial-list');
+            serialBoxes.forEach((serialBox) => {
+            if (serialBox.querySelector('.trigas-simple-serial-clear-all')) {
+                return; // ya agregado
+            }
+
+            const toggle = serialBox.querySelector('.trigas-simple-serial-toggle');
+            const list = serialBox.querySelector('.trigas-simple-serial-items');
+
+            if (toggle && list) {
+                const clearAllButton = document.createElement('button');
+                clearAllButton.type = 'button';
+                clearAllButton.className = 'trigas-simple-serial-clear-all';
+                clearAllButton.textContent = 'Limpiar lista';
+
+                clearAllButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    if (typeof trigasTempSetSerials === 'function') {
+                        trigasTempSetSerials([]);
+                    }
+
+                    if (typeof trigasTempSetDestinationRead === 'function') {
+                        trigasTempSetDestinationRead(false);
+                    }
+
+                    if (typeof trigasTempSetDestinationName === 'function') {
+                        trigasTempSetDestinationName('');
+                    }
+
+                    if (typeof trigasTempShowPdaMessage === 'function') {
+                        trigasTempShowPdaMessage('Lista de seriales limpiada.', 'success');
+                    }
+
+                    if (typeof window.trigasTempRenderSerialListSafe === 'function') {
+                        window.trigasTempRenderSerialListSafe(false);
+                    }
+                });
+
+                serialBox.insertBefore(clearAllButton, list);
+            }
+        });
+        }
+    } catch (e) {
+        console.error('trigas: error inserting clear list button', e);
+    }
 };
 
 setTimeout(() => {
@@ -4485,6 +4975,531 @@ setTimeout(() => {
 
 console.log('TRIGAS PDA: expected qty móvil seguro activo');
 
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI1 / LISTAS / CONTADORES
+   Seriales seleccionados reales, sincronizados con backend.
+   ========================================================= */
+
+function trigasTri1SelectedSerialItemsToNames(items) {
+    const source = Array.isArray(items)
+        ? items
+        : (items && Array.isArray(items.serials) ? items.serials : []);
+
+    return source
+        .map((item) => {
+            if (typeof item === 'string') {
+                return item;
+            }
+            return item && item.serial ? item.serial : '';
+        })
+        .filter(Boolean);
+}
+
+function trigasTri1SelectedIsActive() {
+    return (
+        typeof trigasTri1IsActive === 'function' &&
+        trigasTri1IsActive() &&
+        document.body &&
+        document.body.classList.contains('trigas-barcode-operational-screen') &&
+        !document.body.classList.contains('trigas-tri3-active') &&
+        !document.body.classList.contains('trigas-tri3-native-screen')
+    );
+}
+
+async function trigasTri1FetchSelectedSerialsFromBackend() {
+    const pickingId = trigasTempGetPickingId();
+    if (!pickingId) {
+        return [];
+    }
+
+    const response = await fetch('/web/dataset/call_kw/stock.picking/trigas_barcode_get_scanned_serials_for_pda', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'call',
+            params: {
+                model: 'stock.picking',
+                method: 'trigas_barcode_get_scanned_serials_for_pda',
+                args: [[pickingId]],
+                kwargs: {},
+            },
+            id: Date.now(),
+        }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+        throw data.error;
+    }
+
+    return trigasTri1SelectedSerialItemsToNames(data.result || []);
+}
+
+async function trigasTri1SaveSelectedSerialsToBackend(serialNames) {
+    const pickingId = trigasTempGetPickingId();
+    if (!pickingId) {
+        return [];
+    }
+
+    const response = await fetch('/web/dataset/call_kw/stock.picking/trigas_barcode_save_temp_serials_for_pda', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'call',
+            params: {
+                model: 'stock.picking',
+                method: 'trigas_barcode_save_temp_serials_for_pda',
+                args: [[pickingId], serialNames || []],
+                kwargs: {},
+            },
+            id: Date.now(),
+        }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+        throw data.error;
+    }
+
+    return trigasTri1SelectedSerialItemsToNames(data.result && data.result.serials ? data.result.serials : []);
+}
+
+async function trigasTri1RemoveSelectedSerialFromBackend(serialName) {
+    const pickingId = trigasTempGetPickingId();
+    if (!pickingId) {
+        return [];
+    }
+
+    const response = await fetch('/web/dataset/call_kw/stock.picking/trigas_barcode_remove_scanned_serial_for_pda', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'call',
+            params: {
+                model: 'stock.picking',
+                method: 'trigas_barcode_remove_scanned_serial_for_pda',
+                args: [[pickingId], serialName],
+                kwargs: {},
+            },
+            id: Date.now(),
+        }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+        throw data.error;
+    }
+
+    return trigasTri1SelectedSerialItemsToNames(data.result && data.result.serials ? data.result.serials : []);
+}
+
+let trigasTri1SelectedSyncStarted = false;
+async function trigasTri1SyncSelectedSerialsFromBackend(forceRender = true) {
+    if (!trigasTri1SelectedIsActive()) {
+        return [];
+    }
+
+    if (trigasTri1SelectedSyncStarted) {
+        return trigasTempGetSerials();
+    }
+
+    trigasTri1SelectedSyncStarted = true;
+    try {
+        const serialNames = await trigasTri1FetchSelectedSerialsFromBackend();
+        trigasTempSetSerials(serialNames);
+        if (forceRender && typeof window.trigasTempRenderSerialListSafe === 'function') {
+            window.trigasTempRenderSerialListSafe(false);
+        }
+        return serialNames;
+    } catch (error) {
+        console.log('TRIGAS TRI1: error sincronizando seriales seleccionados', error);
+        return trigasTempGetSerials();
+    } finally {
+        trigasTri1SelectedSyncStarted = false;
+    }
+}
+
+const trigasTri1PreviousAddSerialFromScanner = trigasTempAddSerialFromScanner;
+trigasTempAddSerialFromScanner = async function trigasTri1AddSelectedSerialFromScanner(serialName) {
+    if (!trigasTri1SelectedIsActive()) {
+        return trigasTri1PreviousAddSerialFromScanner(serialName);
+    }
+
+    serialName = String(serialName || '').trim();
+    if (!serialName) {
+        return false;
+    }
+
+    const serials = trigasTempGetSerials();
+    if (serials.includes(serialName)) {
+        trigasTempShowPdaMessage('El serial ' + serialName + ' ya está seleccionado.', 'error');
+        trigasTri1SelectedSerialsSetOpen(false);
+        window.trigasTempRenderSerialListSafe(false);
+        return true;
+    }
+
+    const expectedQty = trigasTempGetExpectedQty();
+    if (expectedQty && serials.length >= expectedQty) {
+        trigasTempShowPdaMessage(
+            'Ya se completaron los ' + expectedQty + ' seriales esperados. Elimine uno si desea cambiarlo.',
+            'error'
+        );
+        trigasTri1SelectedSerialsSetOpen(false);
+        window.trigasTempRenderSerialListSafe(false);
+        return true;
+    }
+
+    let validation = false;
+    try {
+        validation = await trigasTempValidateSerialInBackend(serialName);
+    } catch (error) {
+        console.log('TRIGAS TRI1: error validando serial seleccionado', error);
+        trigasTempShowPdaMessage('No se pudo validar el serial.', 'error');
+        return false;
+    }
+
+    if (!validation || !validation.ok) {
+        trigasTempShowPdaMessage(
+            validation && validation.message ? validation.message : 'Serial no válido para este conduce.',
+            'error'
+        );
+        return false;
+    }
+
+    const nextSerials = serials.concat([serialName]);
+    try {
+        const savedSerials = await trigasTri1SaveSelectedSerialsToBackend(nextSerials);
+        trigasTempSetSerials(savedSerials.length ? savedSerials : nextSerials);
+        if (trigasTempGetSerials().length < trigasTempGetExpectedQty()) {
+            trigasTempSetDestinationRead(false);
+        }
+        trigasTri1SelectedSerialsSetOpen(false);
+        window.trigasTempRenderSerialListSafe(false);
+        trigasTempShowPdaMessage(
+            trigasTempGetSerials().length >= trigasTempGetExpectedQty()
+                ? 'Cantidad completa leída.'
+                : 'Serial seleccionado: ' + serialName,
+            'success'
+        );
+        return true;
+    } catch (error) {
+        console.log('TRIGAS TRI1: error guardando serial seleccionado', error);
+        trigasTempShowPdaMessage('No se pudo guardar el serial seleccionado.', 'error');
+        return false;
+    }
+};
+
+window.trigasTempAddSerialFromScanner = trigasTempAddSerialFromScanner;
+
+function trigasTri1FindSelectedSerialsAnchor(productLine) {
+    const counter = productLine.querySelector(
+        '.trigas-pda-own-counter, .trigas-temp-counter-override, .trigas-temp-counter'
+    );
+    if (counter) {
+        return counter;
+    }
+
+    const textMatches = Array.from(productLine.querySelectorAll('*'))
+        .filter((el) => /Leídos\s*:/i.test(el.innerText || '') || /Leidos\s*:/i.test(el.innerText || ''))
+        .sort((a, b) => String(a.innerText || '').length - String(b.innerText || '').length);
+
+    return textMatches[0] || null;
+}
+
+function trigasTri1GetStableSelectedSerialsZone(productLine) {
+    const root = productLine.closest('.o_barcode_client_action') || document.querySelector('.o_barcode_client_action');
+    if (!root) {
+        return false;
+    }
+
+    let zone = root.querySelector('.trigas-tri1-stable-selected-serials-zone');
+    if (!zone) {
+        zone = document.createElement('div');
+        zone.className = 'trigas-tri1-stable-selected-serials-zone';
+    }
+
+    if (productLine.parentNode) {
+        productLine.parentNode.insertBefore(zone, productLine.nextSibling);
+    } else {
+        root.appendChild(zone);
+    }
+
+    return zone;
+}
+
+function trigasTri1PlaceSelectedSerialsDropdown(productLine, serialCard) {
+    const zone = trigasTri1GetStableSelectedSerialsZone(productLine);
+    if (!zone) {
+        return false;
+    }
+
+    zone.appendChild(serialCard);
+    return zone;
+}
+
+function trigasTri1SelectedSerialsOpenKey() {
+    const pickingId = typeof trigasTempGetPickingId === 'function' ? trigasTempGetPickingId() : false;
+    return 'trigas_tri1_selected_serials_open_' + (pickingId || 'unknown');
+}
+
+function trigasTri1SelectedSerialsIsOpen(forceExpanded = false) {
+    if (forceExpanded) {
+        return true;
+    }
+
+    try {
+        return window.sessionStorage.getItem(trigasTri1SelectedSerialsOpenKey()) === '1';
+    } catch (error) {
+        return false;
+    }
+}
+
+function trigasTri1SelectedSerialsSetOpen(isOpen) {
+    try {
+        window.sessionStorage.setItem(trigasTri1SelectedSerialsOpenKey(), isOpen ? '1' : '0');
+    } catch (error) {
+        // sessionStorage puede no estar disponible en algunos contextos PDA.
+    }
+}
+
+function trigasTri1RenderSelectedSerialsDropdown(productLine, serials, expectedQty, forceExpanded = false) {
+    serials = trigasTri1SelectedSerialItemsToNames(serials);
+
+    productLine.querySelectorAll('.trigas-tri1-selected-serials').forEach((oldBlock) => oldBlock.remove());
+    productLine.querySelectorAll('.trigas-tri1-selected-serials-card').forEach((oldBlock) => oldBlock.remove());
+
+    const zone = trigasTri1GetStableSelectedSerialsZone(productLine);
+    if (!zone) {
+        return false;
+    }
+
+    let serialCard = zone.querySelector('.trigas-tri1-selected-serials-card');
+    if (!serialCard) {
+        serialCard = document.createElement('div');
+        serialCard.className = 'trigas-tri1-selected-serials-card';
+    }
+
+    trigasTri1PlaceSelectedSerialsDropdown(productLine, serialCard);
+    serialCard.style.display = 'block';
+    const isOpen = trigasTri1SelectedSerialsIsOpen(forceExpanded);
+    serialCard.dataset.open = isOpen ? '1' : '0';
+
+    let header = serialCard.querySelector('.trigas-tri1-selected-serials-header');
+    if (!header) {
+        header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'trigas-tri1-selected-serials-header';
+        serialCard.appendChild(header);
+    }
+
+    let arrow = header.querySelector('.trigas-tri1-selected-serials-arrow');
+    if (!arrow) {
+        arrow = document.createElement('span');
+        arrow.className = 'trigas-tri1-selected-serials-arrow';
+        header.appendChild(arrow);
+    }
+    arrow.textContent = isOpen ? '▾' : '▸';
+
+    let title = header.querySelector('.trigas-tri1-selected-serials-title');
+    if (!title) {
+        title = document.createElement('span');
+        title.className = 'trigas-tri1-selected-serials-title';
+        header.appendChild(title);
+    }
+    title.textContent = 'Seriales seleccionados (' + serials.length + '/' + (expectedQty || '?') + ')';
+
+    let body = serialCard.querySelector('.trigas-tri1-selected-serials-body');
+    if (!body) {
+        body = document.createElement('div');
+        body.className = 'trigas-tri1-selected-serials-body';
+        serialCard.appendChild(body);
+    }
+    body.style.display = isOpen ? 'block' : 'none';
+    body.innerHTML = '';
+
+    if (!header.__trigasTri1SelectedSerialsClickBound) {
+        header.__trigasTri1SelectedSerialsClickBound = true;
+        header.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const nextOpen = serialCard.dataset.open !== '1';
+            serialCard.dataset.open = nextOpen ? '1' : '0';
+            trigasTri1SelectedSerialsSetOpen(nextOpen);
+
+            const currentArrow = serialCard.querySelector('.trigas-tri1-selected-serials-arrow');
+            const currentBody = serialCard.querySelector('.trigas-tri1-selected-serials-body');
+            if (currentArrow) {
+                currentArrow.textContent = nextOpen ? '▾' : '▸';
+            }
+            if (currentBody) {
+                currentBody.style.display = nextOpen ? 'block' : 'none';
+            }
+        });
+    }
+
+    if (!serials.length) {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.className = 'trigas-tri1-selected-serials-empty';
+        emptyMessage.textContent = 'Todavía no hay seriales seleccionados.';
+        body.appendChild(emptyMessage);
+    }
+
+    serials.forEach((serial) => {
+        const row = document.createElement('div');
+        row.className = 'trigas-tri1-selected-serial-row';
+
+        const serialText = document.createElement('span');
+        serialText.className = 'trigas-tri1-selected-serial-name';
+        serialText.textContent = serial;
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'trigas-tri1-selected-serial-delete';
+        deleteButton.dataset.serial = serial;
+        deleteButton.setAttribute('aria-label', 'Borrar serial ' + serial);
+        deleteButton.textContent = '×';
+        deleteButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            deleteButton.disabled = true;
+            try {
+                const remaining = await trigasTri1RemoveSelectedSerialFromBackend(serial);
+                trigasTempSetSerials(remaining);
+                trigasTempSetDestinationRead(false);
+                if (typeof trigasTempSetDestinationName === 'function') {
+                    trigasTempSetDestinationName('');
+                }
+                window.trigasTempRenderSerialListSafe(true);
+                trigasTempRefreshValidateState();
+                trigasTempShowPdaMessage('Serial eliminado: ' + serial, 'success');
+            } catch (error) {
+                console.log('TRIGAS TRI1: error eliminando serial seleccionado', error);
+                deleteButton.disabled = false;
+                trigasTempShowPdaMessage('No se pudo eliminar el serial seleccionado.', 'error');
+            }
+        });
+
+        row.appendChild(serialText);
+        row.appendChild(deleteButton);
+        body.appendChild(row);
+    });
+
+    console.log('TRIGAS TRI1 SELECTED LIST DEBUG', {
+        selectedSerials: serials,
+        selectedSerialNames: serials,
+        backendState: 'sessionStorage sincronizado desde backend',
+        record: null,
+        pickingId: typeof trigasTempGetPickingId === 'function' ? trigasTempGetPickingId() : false,
+    });
+
+    return serialCard;
+}
+
+async function trigasTri1RenderSelectedSerialsDropdownFromCurrentScreen(forceExpanded = false) {
+    const productLine = trigasTempFindProductLineSafe();
+    if (!productLine) {
+        return false;
+    }
+
+    let serials = trigasTempGetSerials();
+    const expectedQty = trigasTempGetExpectedQty();
+
+    try {
+        const backendSerials = await trigasTri1FetchSelectedSerialsFromBackend();
+        if (backendSerials.length || !serials.length) {
+            serials = backendSerials;
+            trigasTempSetSerials(serials);
+        }
+    } catch (error) {
+        console.warn('TRIGAS TRI1 dropdown backend sync failed', error);
+    }
+
+    trigasTempUpdateCounter(serials.length);
+    productLine.classList.toggle('trigas-temp-complete', !!expectedQty && serials.length >= expectedQty);
+    const serialBox = trigasTri1RenderSelectedSerialsDropdown(productLine, serials, expectedQty, forceExpanded);
+    trigasTempRenderDestinationStatus();
+    trigasTempRefreshValidateState();
+    return serialBox;
+}
+
+function trigasTri1ScheduleRenderSelectedSerialsDropdown(forceExpanded = false) {
+    setTimeout(function () {
+        try {
+            trigasTri1RenderSelectedSerialsDropdownFromCurrentScreen(forceExpanded);
+        } catch (error) {
+            console.warn('TRIGAS TRI1 dropdown render failed', error);
+        }
+    }, 0);
+}
+
+window.trigasTri1RenderSelectedSerialsDropdown = trigasTri1RenderSelectedSerialsDropdownFromCurrentScreen;
+window.trigasTri1ScheduleRenderSelectedSerialsDropdown = trigasTri1ScheduleRenderSelectedSerialsDropdown;
+
+const trigasTri1PreviousRenderSelectedSerialList = window.trigasTempRenderSerialListSafe;
+window.trigasTempRenderSerialListSafe = function trigasTri1RenderSelectedSerialList(forceExpanded = false) {
+    if (!trigasTri1SelectedIsActive()) {
+        if (typeof trigasTri1PreviousRenderSelectedSerialList === 'function') {
+            trigasTri1PreviousRenderSelectedSerialList(forceExpanded);
+        }
+        return;
+    }
+
+    document.querySelectorAll('.trigas-tri1-scan-log-box').forEach((box) => box.remove());
+
+    const productLine = trigasTempFindProductLineSafe();
+    if (!productLine) {
+        return;
+    }
+
+    const serials = trigasTempGetSerials();
+    const expectedQty = trigasTempGetExpectedQty();
+    const complete = !!expectedQty && serials.length >= expectedQty;
+
+    trigasTempUpdateCounter(serials.length);
+    productLine.classList.toggle('trigas-temp-complete', complete);
+
+    const serialBox = trigasTri1RenderSelectedSerialsDropdown(productLine, serials, expectedQty, forceExpanded);
+    trigasTri1ScheduleRenderSelectedSerialsDropdown(forceExpanded);
+
+    if (!serials.length) {
+        trigasTempSetDestinationRead(false);
+        if (typeof trigasTempSetDestinationName === 'function') {
+            trigasTempSetDestinationName('');
+        }
+        trigasTempRenderDestinationStatus();
+        trigasTempRefreshValidateState();
+        trigasTri1SyncSelectedSerialsFromBackend(false).then((syncedSerials) => {
+            if (syncedSerials.length) {
+                window.trigasTempRenderSerialListSafe(false);
+            }
+        });
+        return;
+    }
+
+    serialBox.style.display = 'block';
+    trigasTempRenderDestinationStatus();
+    trigasTempRefreshValidateState();
+    trigasTri1ScheduleRenderSelectedSerialsDropdown(forceExpanded);
+};
+
+setTimeout(() => trigasTri1SyncSelectedSerialsFromBackend(true), 350);
+setTimeout(() => trigasTri1SyncSelectedSerialsFromBackend(true), 1200);
+setTimeout(() => trigasTri1ScheduleRenderSelectedSerialsDropdown(false), 1500);
+
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI1 / LISTAS / CONTADORES
+   Estado visual de ubicacion y boton validar verde.
+   ========================================================= */
 
 /* =========================================================
    TRIGAS PDA - Mostrar ubicación simple
@@ -4788,6 +5803,11 @@ function trigasFixApplyValidateGreenState() {
 })();
 
 
+/* =========================================================
+   TRIGAS FASE 0 - TRI2 / FIRMA
+   Estado frontend de ubicacion cliente y sincronizacion antes de validar.
+   ========================================================= */
+
 /* TRIGAS FIX FINAL - Conduce 2 client location frontend state and sync */
 (function () {
     function trigasC2GetPickingIdFromUrl() {
@@ -5005,21 +6025,42 @@ function trigasFixApplyValidateGreenState() {
                 return;
             }
 
-            btn.__trigasC2ValidatedAndReleased = true;
-            btn.click();
-
             // TRIGAS REGLA 1 — TRI2: redirigir a Pantalla de Operaciones tras validar
+            // Importante: instalar listener ANTES de liberar el click nativo.
+            // Si se instala después, Odoo puede validar/cambiar hash demasiado rápido
+            // y el retorno a Operaciones no ocurre.
             (function () {
+                if (window.__trigasTri2HashChangePending) {
+                    return;
+                }
+                window.__trigasTri2HashChangePending = true;
+
                 function onTri2Validated() {
                     window.removeEventListener('hashchange', onTri2Validated);
                     clearTimeout(cleanupTri2Timer);
+                    window.__trigasTri2HashChangePending = false;
                     trigasGoToOperaciones();
                 }
+
                 window.addEventListener('hashchange', onTri2Validated);
+
                 var cleanupTri2Timer = setTimeout(function () {
                     window.removeEventListener('hashchange', onTri2Validated);
+                    window.__trigasTri2HashChangePending = false;
                 }, 8000);
             })();
+
+            btn.__trigasC2ValidatedAndReleased = true;
+            btn.click();
+
+            // TRIGAS TRI2 FALLBACK:
+            // En algunos casos Odoo valida el Conduce 2 sin disparar hashchange.
+            // Por eso forzamos el retorno a Operaciones luego de soltar el click nativo.
+            console.log('TRIGAS TRI2: click nativo liberado, programando retorno a Operaciones');
+            setTimeout(function () {
+                console.log('TRIGAS TRI2: fallback retorno a Operaciones ejecutado');
+                trigasGoToOperaciones();
+            }, 1200);
         }, true);
     }
 
@@ -5076,6 +6117,11 @@ function trigasFixApplyValidateGreenState() {
     console.log('TRIGAS FIX FINAL: Conduce 2 frontend state + sync activo');
 })();
 
+
+/* =========================================================
+   TRIGAS FASE 0 - TRI2 / FIRMA
+   Boton de firma independiente y control de flujo Conduce 2.
+   ========================================================= */
 
 /* TRIGAS FIX FINAL - Boton firma independiente Conduce 2 */
 (function () {
@@ -5465,6 +6511,11 @@ function trigasFixApplyValidateGreenState() {
 })();
 
 
+/* =========================================================
+   TRIGAS FASE 0 - TRI2 / FIRMA / NAVEGACION
+   Control de firma y validacion de Conduce 2.
+   ========================================================= */
+
 /* TRIGAS FIX FINAL - Control flujo firma y validar Conduce 2 */
 (function () {
     function trigasC2FlowGetPickingId() {
@@ -5770,6 +6821,11 @@ function trigasFixApplyValidateGreenState() {
 
 
 
+/* =========================================================
+   TRIGAS FASE 0 - TRI3 / FIRMA / NAVEGACION
+   Botones frontend, firma y cancelar de TRI3. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
+
 /* TRIGAS FIX FINAL - TRI3 botones frontend only */
 (function () {
     if (window.__trigasTri3FrontendOnlyButtonsStarted) {
@@ -5805,12 +6861,19 @@ function trigasFixApplyValidateGreenState() {
                 display: none !important;
             }
             body.trigas-tri3-active.trigas-tri3-signed .o_barcode_client_action .o_validate_page {
+                min-height: 58px !important;
+                width: 100% !important;
+                flex: 1 1 100% !important;
                 background-color: #198754 !important;
                 border-color: #198754 !important;
                 color: #ffffff !important;
                 font-weight: 900 !important;
+                font-size: 19px !important;
                 opacity: 1 !important;
                 pointer-events: auto !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
         `;
         document.head.appendChild(style);
@@ -5880,11 +6943,26 @@ function trigasFixApplyValidateGreenState() {
         );
     }
 
+    function hasSignatureModalOpen() {
+        return !!document.getElementById('trigas_signature_modal_wrapper');
+    }
+
     function removeSignButton() {
-        const existing = document.getElementById('trigas_tri3_frontend_signature_button_wrapper');
-        if (existing) {
-            existing.remove();
-        }
+        document
+            .querySelectorAll('#trigas_tri3_frontend_signature_button_wrapper')
+            .forEach((existing) => existing.remove());
+
+        document
+            .querySelectorAll('#trigas_tri3_frontend_signature_button, .trigas-tri3-frontend-signature-button')
+            .forEach((existing) => existing.remove());
+
+        document
+            .querySelectorAll('button')
+            .forEach((button) => {
+                if ((button.textContent || '').trim() === '✍ FIRMAR') {
+                    button.remove();
+                }
+            });
     }
 
     function removeCancelButton() {
@@ -5938,7 +7016,13 @@ function trigasFixApplyValidateGreenState() {
     }
 
     function ensureSignButton() {
-        if (document.getElementById('trigas_tri3_frontend_signature_button_wrapper')) {
+        const existingButtons = document.querySelectorAll('#trigas_tri3_frontend_signature_button_wrapper');
+        if (existingButtons.length) {
+            existingButtons.forEach((el, index) => {
+                if (index > 0) {
+                    el.remove();
+                }
+            });
             return;
         }
 
@@ -5946,28 +7030,30 @@ function trigasFixApplyValidateGreenState() {
         wrapper.id = 'trigas_tri3_frontend_signature_button_wrapper';
 
         wrapper.style.position = 'fixed';
-        wrapper.style.left = '0';
-        wrapper.style.right = '0';
-        wrapper.style.bottom = '52px';
+        wrapper.style.left = '20px';
+        wrapper.style.right = '20px';
+        wrapper.style.bottom = '86px';
         wrapper.style.zIndex = '150000';
         wrapper.style.display = 'flex';
         wrapper.style.justifyContent = 'center';
-        wrapper.style.background = '#ffffff';
-        wrapper.style.borderTop = '1px solid #ddd';
+        wrapper.style.pointerEvents = 'none';
 
         const button = document.createElement('button');
+        button.id = 'trigas_tri3_frontend_signature_button';
         button.type = 'button';
         button.textContent = '✍ FIRMAR';
-        button.className = 'btn btn-primary';
+        button.className = 'btn btn-primary trigas-tri3-frontend-signature-button';
 
-        button.style.width = '100%';
-        button.style.height = '38px';
-        button.style.borderRadius = '0';
+        button.style.width = '86%';
+        button.style.maxWidth = '320px';
+        button.style.padding = '12px';
         button.style.fontWeight = '900';
-        button.style.fontSize = '14px';
+        button.style.fontSize = '15px';
+        button.style.borderRadius = '10px';
+        button.style.pointerEvents = 'auto';
         button.style.backgroundColor = '#0d6efd';
         button.style.borderColor = '#0d6efd';
-        button.style.color = '#ffffff';
+        button.style.color = '#fff';
 
         button.onclick = function (event) {
             event.preventDefault();
@@ -5982,6 +7068,7 @@ function trigasFixApplyValidateGreenState() {
             }
 
             model._trigasOpenSignatureModal();
+            removeCancelButton();
             hookSignatureSaveButton();
         };
 
@@ -5989,42 +7076,33 @@ function trigasFixApplyValidateGreenState() {
         document.body.appendChild(wrapper);
     }
 
-    function ensureCancelButton() {
-        const signWrapper = document.getElementById('trigas_tri3_frontend_signature_button_wrapper');
-        const bottomPos = signWrapper ? '96px' : '52px';
-
+    function ensureCancelButton(signed) {
+        const bottomPos = signed ? '108px' : '38px';
         const existing = document.getElementById('trigas_tri3_cancel_button');
         if (existing) {
             existing.style.bottom = bottomPos;
             return;
         }
 
-        const wrapper = document.createElement('div');
-        wrapper.id = 'trigas_tri3_cancel_button';
-
-        wrapper.style.position = 'fixed';
-        wrapper.style.left = '0';
-        wrapper.style.right = '0';
-        wrapper.style.bottom = bottomPos;
-        wrapper.style.zIndex = '150000';
-        wrapper.style.display = 'flex';
-        wrapper.style.justifyContent = 'center';
-        wrapper.style.background = '#ffffff';
-        wrapper.style.borderTop = '1px solid #ddd';
-
         const button = document.createElement('button');
+        button.id = 'trigas_tri3_cancel_button';
         button.type = 'button';
-        button.textContent = '← CANCELAR';
-        button.className = 'btn btn-secondary text-uppercase o_cancel_button';
+        button.textContent = 'Cancelar';
+        button.className = 'btn btn-danger';
 
-        button.style.width = '100%';
-        button.style.height = '44px';
-        button.style.borderRadius = '0';
-        button.style.fontWeight = '800';
-        button.style.fontSize = '15px';
-        button.style.backgroundColor = '#6c757d';
-        button.style.borderColor = '#6c757d';
+        button.style.position = 'fixed';
+        button.style.right = '12px';
+        button.style.bottom = bottomPos;
+        button.style.zIndex = '160000';
+        button.style.padding = '7px 11px';
+        button.style.border = 'none';
+        button.style.borderRadius = '16px';
+        button.style.background = '#dc3545';
         button.style.color = '#ffffff';
+        button.style.fontSize = '12px';
+        button.style.fontWeight = '800';
+        button.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
+        button.style.opacity = '0.92';
 
         button.onclick = async function (event) {
             event.preventDefault();
@@ -6076,8 +7154,7 @@ function trigasFixApplyValidateGreenState() {
             }
         };
 
-        wrapper.appendChild(button);
-        document.body.appendChild(wrapper);
+        document.body.appendChild(button);
     }
 
     function controlButtons() {
@@ -6089,10 +7166,15 @@ function trigasFixApplyValidateGreenState() {
         }
 
         ensureTri3Styles();
-        ensureCancelButton();
 
         const signed = isSignedFrontend();
         const truckReady = hasTruckDestinationVisible();
+
+        if (hasSignatureModalOpen()) {
+            removeCancelButton();
+        } else {
+            ensureCancelButton(signed);
+        }
 
         applyTri3ButtonState(signed);
 
@@ -6222,6 +7304,11 @@ function trigasFixApplyValidateGreenState() {
 
 
 
+/* =========================================================
+   TRIGAS FASE 0 - NAVEGACION / OBSERVERS / INTERVALS
+   Menu Codigo de Barras, listas y retorno a Operaciones.
+   ========================================================= */
+
 /* TRIGAS MENU BARCODE: bloque visual anterior removido */
 
 
@@ -6264,6 +7351,22 @@ function trigasFixApplyValidateGreenState() {
         );
     }
 
+    function isPickingTypeKanbanRoute() {
+        return (
+            trigasIsBarcodeOperationsMenuScreen() &&
+            !document.querySelector('.o_barcode_client_action')
+        );
+    }
+
+    function setBodyClass(className, active) {
+        const hasClass = document.body.classList.contains(className);
+        if (active && !hasClass) {
+            document.body.classList.add(className);
+        } else if (!active && hasClass) {
+            document.body.classList.remove(className);
+        }
+    }
+
     // Mientras la ruta ya apunta al menú de operaciones pero el contenido
     // todavía no confirma cuál pantalla es (kanban final vs. detalle de
     // escaneo), mantenemos un estado "pending": ocultamos el kanban nativo
@@ -6281,9 +7384,19 @@ function trigasFixApplyValidateGreenState() {
             return;
         }
         injectStableMenuCss();
+
+        if (isPickingTypeKanbanRoute()) {
+            pendingSince = null;
+            setBodyClass('trigas-barcode-route-pending', false);
+            setBodyClass('trigas-barcode-operational-screen', true);
+            setBodyClass('trigas-barcode-main-menu-screen', true);
+            trigasClearPickingListBodyClassesSafe();
+            return;
+        }
+
         pendingSince = Date.now();
-        document.body.classList.remove('trigas-barcode-main-menu-screen');
-        document.body.classList.add('trigas-barcode-route-pending');
+        setBodyClass('trigas-barcode-main-menu-screen', false);
+        setBodyClass('trigas-barcode-route-pending', true);
     }
 
     function applyBarcodeMenuClass() {
@@ -6320,6 +7433,18 @@ function trigasFixApplyValidateGreenState() {
 
         const ready = !!(route && hasOperations && !isDetail && !isInventorySummary);
 
+        if (isPickingTypeKanbanRoute()) {
+            const mainMenuReady = !!(!isDetail && !isInventorySummary && (hasOperations || document.querySelector('.o_kanban_view')));
+            pendingSince = null;
+            setBodyClass('trigas-barcode-route-pending', false);
+            setBodyClass('trigas-barcode-main-menu-screen', mainMenuReady);
+            setBodyClass('trigas-barcode-operational-screen', mainMenuReady);
+            if (mainMenuReady) {
+                trigasClearPickingListBodyClassesSafe();
+            }
+            return;
+        }
+
         // Solo mostramos el spinner cuando hay un kanban realmente montado en
         // el DOM (la señal real de que Odoo está pintando la pantalla de
         // operaciones con su estilo nativo) y todavía no podemos confirmar
@@ -6339,8 +7464,8 @@ function trigasFixApplyValidateGreenState() {
             pendingSince = null;
         }
 
-        document.body.classList.toggle('trigas-barcode-route-pending', pending);
-        document.body.classList.toggle('trigas-barcode-main-menu-screen', ready);
+        setBodyClass('trigas-barcode-route-pending', pending);
+        setBodyClass('trigas-barcode-main-menu-screen', ready);
     }
 
     function injectStableMenuCss() {
@@ -6357,7 +7482,7 @@ function trigasFixApplyValidateGreenState() {
                 transition: none !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view {
                 opacity: 1 !important;
                 transition: opacity 0.18s ease-in !important;
             }
@@ -6382,14 +7507,14 @@ function trigasFixApplyValidateGreenState() {
                 to { transform: rotate(360deg); }
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view {
                 padding: 10px 10px 10px 10px !important;
                 align-content: flex-start !important;
                 justify-content: flex-start !important;
                 min-height: auto !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record {
                 min-height: 92px !important;
                 height: auto !important;
                 margin: 0 0 10px 0 !important;
@@ -6398,8 +7523,8 @@ function trigasFixApplyValidateGreenState() {
                 box-shadow: none !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record:empty,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record:not(:has(button)):not(:has(a.btn)):not(:has(.btn)) {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record:empty,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record:not(:has(button)):not(:has(a.btn)):not(:has(.btn)) {
                 display: none !important;
                 height: 0 !important;
                 min-height: 0 !important;
@@ -6408,19 +7533,19 @@ function trigasFixApplyValidateGreenState() {
                 border: 0 !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title span,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record strong {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record strong {
                 font-size: 18px !important;
                 font-weight: 900 !important;
                 line-height: 1.2 !important;
                 margin-bottom: 7px !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record a.btn {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record a.btn {
                 min-height: 48px !important;
                 height: 48px !important;
                 width: 100% !important;
@@ -6429,8 +7554,8 @@ function trigasFixApplyValidateGreenState() {
                 padding: 9px 10px !important;
             }
 
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button *,
-            body.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn * {
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button *,
+            body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn * {
                 font-size: 18px !important;
                 font-weight: 900 !important;
             }
@@ -6563,14 +7688,20 @@ function trigasFixApplyValidateGreenState() {
     function isTri3ListScreen() {
         const text = (document.body ? document.body.innerText : '').toLowerCase();
         const hash = (window.location.hash || '').toLowerCase();
+        const href = (window.location.href || '').toLowerCase();
+        const route = href + ' ' + hash;
+        const isPickingTypeKanban = route.includes('model=stock.picking.type');
+        const isPickingList = route.includes('model=stock.picking') && !isPickingTypeKanban;
+
         return (
-            text.includes('recogida de cilind') &&
-            !text.includes('wh/tri3/') &&
-            (hash.includes('menu_id=246') || hash.includes('action='))
+            isPickingList &&
+            !document.querySelector('.o_barcode_client_action') &&
+            text.includes('wh/tri3/')
         );
     }
 
     document.addEventListener('click', function (ev) {
+        if (trigasIsInventoryOverviewScreen()) return;
         if (!isTri3ListScreen()) return;
 
         const row = ev.target && ev.target.closest
@@ -6640,12 +7771,30 @@ function trigasFixApplyValidateGreenState() {
 (function () {
     if (window.__trigasAutoNuevoStarted) return;
     window.__trigasAutoNuevoStarted = true;
+    var TRIGAS_DEBUG_OBS = false;
 
     function trigasNormalizeText(text) {
         return String(text || '')
             .toLowerCase()
             .normalize('NFD')
             .replace(/[̀-ͯ]/g, '');
+    }
+
+    function trigasShouldInspectAutoNuevoScreen() {
+        if (!document.body) return false;
+
+        var href = trigasNormalizeText(window.location.href || '');
+        var hash = trigasNormalizeText(window.location.hash || '');
+        var route = href + ' ' + hash;
+
+        if (route.includes('model=stock.picking.type')) return false;
+
+        return Boolean(
+            route.includes('model=stock.picking') ||
+            document.querySelector('.o_barcode_client_action') ||
+            document.querySelector('.o_barcode_lines') ||
+            document.querySelector('.o_barcode_line')
+        );
     }
 
     function trigasIsListScreenForAutoNuevo() {
@@ -6695,11 +7844,16 @@ function trigasFixApplyValidateGreenState() {
     // MutationObserver: detecta cuando Odoo monta la lista TRI1/TRI3 en el DOM
     // (Odoo 16 usa el router OWL/pushState, no hashchange)
     var observer = new MutationObserver(function (mutations, obs) {
-        console.log('TRIGAS OBS mutation detected, childList:', mutations.length);
-        console.log('TRIGAS OBS body text snippet:', document.body.innerText.substring(0, 200).toLowerCase().replace(/\s+/g, ' '));
-        console.log('TRIGAS OBS has barcode action:', !!document.querySelector('.o_barcode_client_action'));
-        console.log('TRIGAS OBS trigasIsListScreenForAutoNuevo:', trigasIsListScreenForAutoNuevo());
-        if (!trigasIsListScreenForAutoNuevo()) return;
+        if (!trigasShouldInspectAutoNuevoScreen()) return;
+
+        var isAutoNuevoListScreen = trigasIsListScreenForAutoNuevo();
+        if (TRIGAS_DEBUG_OBS) {
+            console.log('TRIGAS OBS mutation detected, childList:', mutations.length);
+            console.log('TRIGAS OBS body text snippet:', document.body.innerText.substring(0, 200).toLowerCase().replace(/\s+/g, ' '));
+            console.log('TRIGAS OBS has barcode action:', !!document.querySelector('.o_barcode_client_action'));
+            console.log('TRIGAS OBS trigasIsListScreenForAutoNuevo:', isAutoNuevoListScreen);
+        }
+        if (!isAutoNuevoListScreen) return;
 
         // Desconectar para no repetir en el mismo montaje
         obs.disconnect();
@@ -6754,6 +7908,142 @@ function trigasFixApplyValidateGreenState() {
         return txt.includes('validar') || cls.includes('o_validate_page');
     }
 
+    function trigasEnsurePostValidateTransitionStyle() {
+        if (document.getElementById('trigas-post-validate-transition-style')) {
+            return;
+        }
+
+        const style = document.createElement('style');
+        style.id = 'trigas-post-validate-transition-style';
+        style.textContent = `
+            body.trigas-post-validate-transition .o_barcode_client_action {
+                opacity: 0.16 !important;
+                transition: opacity 120ms ease-out !important;
+                pointer-events: none !important;
+            }
+
+            #trigas_post_validate_transition_overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 250000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(255, 255, 255, 0.92);
+                color: #1f2937;
+                font-family: inherit;
+                text-align: center;
+            }
+
+            #trigas_post_validate_transition_overlay .trigas-post-validate-box {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                padding: 18px 22px;
+                border-radius: 10px;
+                background: #ffffff;
+                box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+            }
+
+            #trigas_post_validate_transition_overlay .trigas-post-validate-spinner {
+                width: 26px;
+                height: 26px;
+                border-radius: 999px;
+                border: 3px solid #dbeafe;
+                border-top-color: #0d6efd;
+                animation: trigas-post-validate-spin 0.8s linear infinite;
+            }
+
+            #trigas_post_validate_transition_overlay .trigas-post-validate-title {
+                font-size: 15px;
+                font-weight: 900;
+                line-height: 1.2;
+            }
+
+            #trigas_post_validate_transition_overlay .trigas-post-validate-subtitle {
+                font-size: 12px;
+                font-weight: 700;
+                color: #64748b;
+                line-height: 1.2;
+            }
+
+            @keyframes trigas-post-validate-spin {
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function trigasRemovePostValidateTransition() {
+        if (document.body) {
+            document.body.classList.remove('trigas-post-validate-transition');
+        }
+
+        const overlay = document.getElementById('trigas_post_validate_transition_overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+
+    function trigasHideFloatingControlsForPostValidate() {
+        [
+            'trigas_tri3_frontend_signature_button_wrapper',
+            'trigas_tri3_frontend_signature_button',
+            'trigas_tri3_cancel_button',
+            'trigas_barcode_signature_button_wrapper'
+        ].forEach((id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.remove();
+            }
+        });
+
+        document
+            .querySelectorAll('.trigas-tri3-frontend-signature-button')
+            .forEach((element) => element.remove());
+    }
+
+    function trigasShowPostValidateTransition() {
+        if (!document.body) {
+            return;
+        }
+
+        trigasEnsurePostValidateTransitionStyle();
+        trigasHideFloatingControlsForPostValidate();
+
+        document.body.classList.add('trigas-post-validate-transition');
+
+        let overlay = document.getElementById('trigas_post_validate_transition_overlay');
+        if (overlay) {
+            return;
+        }
+
+        overlay = document.createElement('div');
+        overlay.id = 'trigas_post_validate_transition_overlay';
+
+        const box = document.createElement('div');
+        box.className = 'trigas-post-validate-box';
+
+        const spinner = document.createElement('div');
+        spinner.className = 'trigas-post-validate-spinner';
+
+        const title = document.createElement('div');
+        title.className = 'trigas-post-validate-title';
+        title.textContent = 'Validando recogida';
+
+        const subtitle = document.createElement('div');
+        subtitle.className = 'trigas-post-validate-subtitle';
+        subtitle.textContent = 'Volviendo a Operaciones...';
+
+        box.appendChild(spinner);
+        box.appendChild(title);
+        box.appendChild(subtitle);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+    }
+
     function trigasScheduleGoToOperacionesAfterValidate() {
         if (window.__trigasGlobalPostValidatePending) return;
         window.__trigasGlobalPostValidatePending = true;
@@ -6785,7 +8075,9 @@ function trigasFixApplyValidateGreenState() {
 
             window.__trigasGlobalPostValidatePending = false;
 
+            trigasHideFloatingControlsForPostValidate();
             trigasGoToOperaciones();
+            setTimeout(trigasRemovePostValidateTransition, 900);
         }
 
         // Si Odoo cambia hash, volver de una vez.
@@ -6809,6 +8101,7 @@ function trigasFixApplyValidateGreenState() {
             window.removeEventListener('hashchange', finishRedirect);
             clearInterval(fastWatcher);
             window.__trigasGlobalPostValidatePending = false;
+            trigasRemovePostValidateTransition();
         }, 9000);
     }
 
@@ -6824,6 +8117,7 @@ function trigasFixApplyValidateGreenState() {
         console.log('TRIGAS GLOBAL: validar detectado, programando retorno a Operaciones.');
 
         // No detenemos el click. Dejamos que Odoo valide normalmente.
+        trigasShowPostValidateTransition();
         trigasScheduleGoToOperacionesAfterValidate();
     }, true);
 
@@ -6881,6 +8175,11 @@ function trigasFixApplyValidateGreenState() {
 })();
 
 
+/* =========================================================
+   TRIGAS FASE 0 - TRANSFERENCIA INTERNA
+   Visual, destino, cancelar y protecciones de lista WH/INT.
+   ========================================================= */
+
 /* TRIGAS INT - Visual exclusivo para Transferencias Internas */
 (function () {
     if (window.__trigasInternalTransferVisualStarted) return;
@@ -6893,6 +8192,10 @@ function trigasFixApplyValidateGreenState() {
         style.id = 'trigas-internal-transfer-visual-style';
         style.textContent = `
             body.trigas-int-active .o_barcode_client_action .o_add_line {
+                display: none !important;
+            }
+
+            body.trigas-int-active.trigas-int-destination-pending .o_barcode_client_action .o_validate_page {
                 display: none !important;
             }
 
@@ -6918,7 +8221,7 @@ function trigasFixApplyValidateGreenState() {
                 font-weight: 800 !important;
             }
 
-            body.trigas-int-active .o_barcode_client_action .o_validate_page {
+            body.trigas-int-active.trigas-int-destination-ready .o_barcode_client_action .o_validate_page {
                 min-height: 46px !important;
                 height: 46px !important;
                 width: 100% !important;
@@ -6934,7 +8237,7 @@ function trigasFixApplyValidateGreenState() {
                 box-shadow: none !important;
             }
 
-            body.trigas-int-active .o_barcode_client_action .o_validate_page:before {
+            body.trigas-int-active.trigas-int-destination-ready .o_barcode_client_action .o_validate_page:before {
                 font-weight: 900 !important;
             }
         `;
@@ -6950,15 +8253,35 @@ function trigasFixApplyValidateGreenState() {
         return hasBarcode && text.includes('WH/INT/');
     }
 
+    function getInternalTransferPickingId() {
+        const match = String(window.location.hash || '').match(/active_id=(\d+)/);
+        return match ? String(match[1]) : '';
+    }
+
+    function hasInternalDestinationReady() {
+        const pickingId = getInternalTransferPickingId();
+        return Boolean(
+            pickingId &&
+            window.sessionStorage.getItem('trigas_int_destination_read_' + pickingId) === '1'
+        );
+    }
+
     function syncInternalTransferVisual() {
         if (!document.body) return;
 
         ensureInternalTransferStyle();
 
         if (isInternalTransferBarcodeScreen()) {
+            const destinationReady = hasInternalDestinationReady();
             document.body.classList.add('trigas-int-active');
+            document.body.classList.toggle('trigas-int-destination-ready', destinationReady);
+            document.body.classList.toggle('trigas-int-destination-pending', !destinationReady);
         } else {
-            document.body.classList.remove('trigas-int-active');
+            document.body.classList.remove(
+                'trigas-int-active',
+                'trigas-int-destination-ready',
+                'trigas-int-destination-pending'
+            );
         }
     }
 
@@ -7223,4 +8546,100 @@ function trigasFixApplyValidateGreenState() {
     window.addEventListener('hashchange', scheduleSync);
 
     console.log('TRIGAS INT: botón cancelar flotante activo.');
+})();
+
+
+/* =========================================================
+   TRIGAS FASE 0 - GLOBAL / LISTAS
+   Limpieza visual de tarjetas vacias. CODIGO LEGACY / NO TOCAR TODAVIA.
+   ========================================================= */
+
+/* TRIGAS - Ocultar tarjetas kanban vacías en listas de operaciones */
+(function () {
+    if (window.__trigasHideEmptyKanbanCardsStarted) return;
+    window.__trigasHideEmptyKanbanCardsStarted = true;
+
+    function injectCss() {
+        if (document.getElementById('trigas-hide-empty-kanban-cards-css')) return;
+
+        const style = document.createElement('style');
+        style.id = 'trigas-hide-empty-kanban-cards-css';
+        style.textContent = `
+            body.trigas-picking-list-screen .o_kanban_view .o_kanban_record:empty,
+            body.trigas-picking-list-screen .o_kanban_view .o_kanban_record.o_kanban_ghost,
+            body.trigas-picking-list-screen .o_kanban_view .o_kanban_record:not(:has(button)):not(:has(a)):not(:has(.btn)):not(:has(strong)):not(:has(.badge)):not(:has(.o_badge)) {
+                display: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                overflow: hidden !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function isTrigasPickingListScreen() {
+        if (!document.body) return false;
+
+        const hash = (window.location.hash || '').toLowerCase();
+        const href = (window.location.href || '').toLowerCase();
+        if (hash.includes('model=stock.picking.type') || href.includes('model=stock.picking.type')) {
+            return false;
+        }
+
+        const text = (document.body.innerText || '').toLowerCase();
+        const hasKanban = !!document.querySelector('.o_kanban_view');
+        const hasBarcodePicking = !!document.querySelector('.o_barcode_client_action');
+
+        if (!hasKanban || hasBarcodePicking) return false;
+
+        return (
+            text.includes('entrega a camion') ||
+            text.includes('entrega a camión') ||
+            text.includes('entrega a cliente') ||
+            text.includes('recogida de cilindros') ||
+            text.includes('transferencias internas') ||
+            text.includes('wh/tri1/') ||
+            text.includes('wh/tri2/') ||
+            text.includes('wh/tri3/') ||
+            text.includes('wh/int/')
+        );
+    }
+
+    function syncClass() {
+        injectCss();
+
+        const active = isTrigasPickingListScreen();
+        const hasClass = document.body.classList.contains('trigas-picking-list-screen');
+
+        if (active && !hasClass) {
+            document.body.classList.add('trigas-picking-list-screen');
+        } else if (!active && hasClass) {
+            document.body.classList.remove('trigas-picking-list-screen');
+        }
+    }
+
+    let timer = null;
+    function scheduleSync() {
+        clearTimeout(timer);
+        timer = setTimeout(syncClass, 120);
+    }
+
+    const observer = new MutationObserver(scheduleSync);
+
+    if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+        syncClass();
+    } else {
+        document.addEventListener('DOMContentLoaded', function () {
+            observer.observe(document.body, { childList: true, subtree: true });
+            syncClass();
+        });
+    }
+
+    window.addEventListener('hashchange', scheduleSync);
+
+    console.log('TRIGAS: ocultar tarjetas kanban vacías activo.');
 })();

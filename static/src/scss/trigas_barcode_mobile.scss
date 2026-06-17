@@ -318,6 +318,65 @@ body.trigas-barcode-operational-screen .o_barcode_client_action .o_validate_page
     font-weight: 800 !important;
 }
 
+.trigas-tri1-scan-log-box {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid #d8dee4;
+    border-radius: 10px;
+    background: #ffffff;
+    font-size: 13px;
+}
+
+.trigas-tri1-scan-log-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #1f4e79;
+}
+
+.trigas-tri1-scan-log-empty {
+    padding: 8px;
+    color: #6c757d;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.trigas-tri1-scan-log-row {
+    padding: 7px 8px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f8f9fa;
+    word-break: break-word;
+}
+
+.trigas-tri1-scan-log-row-ok,
+.trigas-tri1-scan-log-row-location {
+    border-color: #198754;
+    background: #eaf7ef;
+}
+
+.trigas-tri1-scan-log-row-blocked,
+.trigas-tri1-scan-log-row-error {
+    border-color: #dc3545;
+    background: #fdecec;
+}
+
+.trigas-tri1-scan-log-row-duplicate {
+    border-color: #ffc107;
+    background: #fff8e1;
+}
+
+.trigas-tri1-scan-log-clear {
+    width: 100%;
+    margin-top: 8px;
+    padding: 7px 10px;
+    border: 1px solid #6c757d;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #6c757d;
+    font-weight: 700;
+}
+
 body.trigas-barcode-operational-screen .o_barcode_client_action .o_barcode_control .btn-primary,
 body.trigas-barcode-operational-screen .o_barcode_client_action .o_validate_page {
     width: 100% !important;
@@ -526,6 +585,220 @@ body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-s
     font-weight: 800 !important;
     padding: 4px 7px !important;
     line-height: 1.2 !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serials {
+    margin: 8px 0 8px 0 !important;
+    padding: 0 !important;
+    border: 1px solid #d8d8d8 !important;
+    border-radius: 6px !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serials-details {
+    width: 100% !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serials-summary {
+    min-height: 38px !important;
+    padding: 9px 10px !important;
+    background: #f0f2f4 !important;
+    color: #222222 !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 20px !important;
+    cursor: pointer !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serials-list {
+    padding: 7px 8px 8px 8px !important;
+    margin: 0 !important;
+    max-height: 165px !important;
+    overflow-y: auto !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serial-row {
+    min-height: 34px !important;
+    padding: 5px 6px !important;
+    margin-bottom: 5px !important;
+    background: #fafafa !important;
+    border: 1px solid #e3e3e3 !important;
+    border-radius: 4px !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serial-name {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: #1f1f1f !important;
+}
+
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-tri1-selected-serial-delete {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    background: #c83c3c !important;
+    color: #ffffff !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    line-height: 28px !important;
+    text-align: center !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 38px !important;
+    max-height: none !important;
+    margin: 10px 8px !important;
+    padding: 10px !important;
+    background: #f7f7f7 !important;
+    border: 1px solid #dddddd !important;
+    border-radius: 6px !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 2 !important;
+    font-size: 15px !important;
+    color: #222222 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials summary {
+    font-weight: 700 !important;
+    cursor: pointer !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-list {
+    margin-top: 6px !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serial-row {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 7px 0 !important;
+    border-top: 1px solid #e5e5e5 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serial-row button {
+    min-width: 30px !important;
+    width: 30px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    border-radius: 4px !important;
+    font-weight: 700 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-empty {
+    padding: 7px 0 !important;
+    color: #666666 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-stable-selected-serials-zone {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 51 !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-card {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 50 !important;
+    margin: 10px 8px 12px 8px !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    border: 1px solid #cfd8dc !important;
+    border-radius: 8px !important;
+    color: #222222 !important;
+    font-size: 14px !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 42px !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-header {
+    width: 100% !important;
+    min-height: 42px !important;
+    padding: 10px 12px !important;
+    border: 0 !important;
+    background: #f1f3f4 !important;
+    color: #222222 !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    text-align: left !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    cursor: pointer !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-arrow {
+    display: inline-block !important;
+    width: 16px !important;
+    min-width: 16px !important;
+    font-size: 16px !important;
+    font-weight: 900 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-body {
+    padding: 8px 12px 10px 12px !important;
+    background: #ffffff !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-card .trigas-tri1-selected-serial-row {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    min-height: 34px !important;
+    border-top: 1px solid #eeeeee !important;
+    padding: 6px 0 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-card .trigas-tri1-selected-serial-row span {
+    font-weight: 700 !important;
+    color: #222222 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-card .trigas-tri1-selected-serial-row button {
+    min-width: 30px !important;
+    width: 30px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    border: 0 !important;
+    border-radius: 4px !important;
+    background: #e9ecef !important;
+    color: #333333 !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 26px !important;
+    padding: 0 !important;
+}
+
+.o_barcode_client_action .trigas-tri1-selected-serials-card .trigas-tri1-selected-serials-empty {
+    color: #666666 !important;
+    font-style: italic !important;
+    padding-top: 6px !important;
 }
 
 /* TRIGAS PDA - Línea completa en verde */
@@ -793,6 +1066,110 @@ body.trigas-barcode-operational-screen .o_mobile_control_panel button {
 }
 
 
+/* Pantalla principal de Código de Barras / Operaciones.
+   Más específico que el CSS inyectado por JS para conservar tarjetas PDA grandes
+   sin usar estados pending ni ocultar el kanban. */
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_content,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_action_manager,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer {
+    max-width: 100% !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view {
+    padding: 6px 8px 16px 8px !important;
+    align-content: flex-start !important;
+    justify-content: flex-start !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_group,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record {
+    width: 100% !important;
+    min-height: 106px !important;
+    margin: 0 0 13px 0 !important;
+    padding: 13px 14px !important;
+    border-radius: 10px !important;
+    border: 1px solid #d6dbe1 !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10) !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record > div,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record > div {
+    width: 100% !important;
+    gap: 9px !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .o_kanban_card_header_title,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record strong,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .o_kanban_record_title,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .o_kanban_record_title span,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .o_kanban_record_title strong,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .o_kanban_card_header_title,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record strong {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    margin-bottom: 9px !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record a.btn,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record button,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .btn,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record a.btn {
+    min-height: 52px !important;
+    width: 100% !important;
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    padding: 11px 12px !important;
+    border-radius: 6px !important;
+}
+
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button *,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn *,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record button *,
+body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .btn * {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+}
+
+@media (max-width: 480px) {
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view {
+        padding: 6px 8px 16px 8px !important;
+    }
+
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record {
+        min-height: 108px !important;
+        margin-bottom: 13px !important;
+        padding: 14px 14px !important;
+    }
+
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record button,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record .btn,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_view .o_kanban_record a.btn,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record button,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record .btn,
+    body.trigas-barcode-operational-screen.trigas-barcode-main-menu-screen .o_kanban_renderer .o_kanban_record a.btn {
+        min-height: 56px !important;
+        font-size: 18px !important;
+    }
+}
+
+
 /* ============================================================
    TRIGAS PDA - Menú principal nativo de Barcode más grande
    Clase: body.trigas-barcode-main-menu-screen-old-disabled
@@ -800,6 +1177,18 @@ body.trigas-barcode-operational-screen .o_mobile_control_panel button {
 
 body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
     padding: 12px 10px 22px 10px !important;
+}
+
+/* Botón Limpiar lista de seriales (TRI1) */
+body.trigas-barcode-operational-screen .o_barcode_client_action .trigas-simple-serial-clear-all {
+    width: 100%;
+    margin: 6px 0;
+    padding: 6px 8px;
+    border: 1px solid #dc3545;
+    border-radius: 6px;
+    background: #fff;
+    color: #dc3545;
+    font-weight: 600;
 }
 
 /* Tarjeta de cada operación */
