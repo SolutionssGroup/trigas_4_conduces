@@ -382,6 +382,10 @@ class StockPicking(models.Model):
 
         return res
 
+    def _check_warn_sms(self):
+        result = super()._check_warn_sms()
+        return result.filtered(lambda p: not p._trigas_barcode_is_customer_step())
+
     def _trigas_get_pending_locations(self):
         self.ensure_one()
 
