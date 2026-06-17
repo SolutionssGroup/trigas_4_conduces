@@ -119,12 +119,12 @@ function tri2IsScreen() {
     const text = document.body ? (document.body.innerText || '') : '';
     return (
         !!document.querySelector('.o_barcode_client_action') &&
-        (
-            text.includes('WH/TRI2/') ||
-            text.includes('Conduce 2') ||
-            text.includes('CLIENTES_TRIGAS/')
-        )
+        text.includes('WH/TRI2/')
     );
+}
+
+function tri2RemoveSessionSerials() {
+    document.querySelectorAll('.trigas-tri2-session-serials').forEach((node) => node.remove());
 }
 
 function tri2FindProductLine() {
@@ -217,6 +217,7 @@ function tri2EnsureStyle() {
 
 function tri2RenderSessionSerials(options = {}) {
     if (!tri2IsScreen()) {
+        tri2RemoveSessionSerials();
         return false;
     }
 
@@ -335,5 +336,7 @@ window.TrigasBarcodeTri2 = {
 setInterval(() => {
     if (window.TrigasBarcodeTri2 && window.TrigasBarcodeTri2.isScreen()) {
         window.TrigasBarcodeTri2.renderSessionSerials();
+    } else {
+        tri2RemoveSessionSerials();
     }
 }, 700);

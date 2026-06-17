@@ -48,9 +48,139 @@ function trigasGetCurrentBarcodePickingNameSafe() {
     return match ? match[0] : '';
 }
 
-function trigasGoToBarcodeOperations(envOrComponent) {
+function trigasEnsureFullWhiteLoadingOverlayStyle() {
+    if (document.getElementById('trigas_full_white_loading_overlay_style')) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'trigas_full_white_loading_overlay_style';
+    style.textContent = `
+        #trigas_full_white_loading_overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2147483647;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #111;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .trigas-full-white-loading-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        .trigas-full-white-loading-spinner {
+            width: 34px;
+            height: 34px;
+            border: 4px solid #d9dee5;
+            border-top-color: #1f6feb;
+            border-radius: 50%;
+            animation: trigas-full-white-loading-spin 0.85s linear infinite;
+        }
+        @keyframes trigas-full-white-loading-spin {
+            to { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function trigasShowFullWhiteLoadingOverlay(message) {
+    if (!document.body) {
+        return;
+    }
+
+    trigasEnsureFullWhiteLoadingOverlayStyle();
+
+    let overlay = document.getElementById('trigas_full_white_loading_overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'trigas_full_white_loading_overlay';
+        overlay.dataset.trigasShownAt = String(Date.now());
+
+        const box = document.createElement('div');
+        box.className = 'trigas-full-white-loading-box';
+
+        const spinner = document.createElement('div');
+        spinner.className = 'trigas-full-white-loading-spinner';
+
+        const text = document.createElement('div');
+        text.className = 'trigas-full-white-loading-text';
+
+        box.appendChild(spinner);
+        box.appendChild(text);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+    }
+
+    const text = overlay.querySelector('.trigas-full-white-loading-text');
+    if (text) {
+        text.textContent = message || 'Procesando...';
+    }
+}
+
+function trigasHideFullWhiteLoadingOverlayAfterReady() {
+    const overlay = document.getElementById('trigas_full_white_loading_overlay');
+    if (!overlay) {
+        return;
+    }
+
+    const shownAt = Number(overlay.dataset.trigasShownAt || Date.now());
+    const startedAt = Date.now();
+    const maxWaitMs = 6000;
+
+    function tryHide() {
+        const currentOverlay = document.getElementById('trigas_full_white_loading_overlay');
+        if (!currentOverlay) {
+            return;
+        }
+
+        const minElapsed = Date.now() - shownAt >= 1000;
+        const ready = trigasIsBarcodeOperationsListScreen();
+        const expired = Date.now() - startedAt >= maxWaitMs;
+
+        if (minElapsed && (ready || expired)) {
+            currentOverlay.remove();
+            return;
+        }
+
+        setTimeout(tryHide, 150);
+    }
+
+    tryHide();
+}
+
+function trigasIsBarcodeOperationsListScreen() {
+    const route = String(window.location.href || '').toLowerCase() + ' ' + String(window.location.hash || '').toLowerCase();
+    const bodyText = String((document.body && document.body.innerText) || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    return (
+        route.includes('action=377') &&
+        route.includes('model=stock.picking.type') &&
+        bodyText.includes('entrega a camion') &&
+        bodyText.includes('entrega a cliente') &&
+        bodyText.includes('recogida de cilindros')
+    );
+}
+
+function trigasGoToBarcodeOperationsList(envOrComponent, options) {
+    const opts = options || {};
+    const barcodeOperationsActionId = 377;
+    const barcodeMenuId = 219;
     const targetUrl = '/web#action=377&model=stock.picking.type&view_type=kanban&menu_id=219&cids=1';
     const pickingName = trigasGetCurrentBarcodePickingNameSafe();
+
+    if (opts.showOverlay === true) {
+        trigasShowFullWhiteLoadingOverlay(opts.message || 'Procesando...');
+    }
 
     if (/WH\/TRI1\//i.test(pickingName)) {
         console.log('TRIGAS TRI1 POST VALIDATE NAV', {
@@ -58,8 +188,8 @@ function trigasGoToBarcodeOperations(envOrComponent) {
             currentHash: window.location.hash,
             currentPath: window.location.href,
             target: 'barcode_operations',
-            targetAction: 377,
-            targetMenu: 219,
+            targetAction: barcodeOperationsActionId,
+            targetMenu: barcodeMenuId,
         });
     }
 
@@ -67,42 +197,121 @@ function trigasGoToBarcodeOperations(envOrComponent) {
      * TRIGAS:
      * Volver a Codigo de Barras / Operaciones sin depender del menu anterior.
      * Primero intenta usar el action service interno de Odoo.
-     * Si no esta disponible, usa un fallback explicito a action=377/menu_id=219.
+     * Si no esta disponible, usa un fallback explicito a la accion de
+     * Operaciones de stock_barcode.
      */
-    try {
-        const barcodeEl = document.querySelector('.o_barcode_client_action');
-        const owlComponent = barcodeEl && barcodeEl.__owl__ && barcodeEl.__owl__.component;
+    setTimeout(function () {
+        try {
+            const barcodeEl = document.querySelector('.o_barcode_client_action');
+            const owlComponent = barcodeEl && barcodeEl.__owl__ && barcodeEl.__owl__.component;
 
-        const actionService =
-            (envOrComponent && envOrComponent.actionService) ||
-            (envOrComponent && envOrComponent.env && envOrComponent.env.services && envOrComponent.env.services.action) ||
-            (envOrComponent && envOrComponent.services && envOrComponent.services.action) ||
-            (owlComponent && owlComponent.actionService) ||
-            (owlComponent && owlComponent.env && owlComponent.env.services && owlComponent.env.services.action);
+            const actionService =
+                (envOrComponent && envOrComponent.actionService) ||
+                (envOrComponent && envOrComponent.env && envOrComponent.env.services && envOrComponent.env.services.action) ||
+                (envOrComponent && envOrComponent.services && envOrComponent.services.action) ||
+                (owlComponent && owlComponent.actionService) ||
+                (owlComponent && owlComponent.env && owlComponent.env.services && owlComponent.env.services.action);
 
-        if (actionService && typeof actionService.doAction === 'function') {
-            console.log('TRIGAS: volviendo a Codigo de Barras / Operaciones via actionService.doAction', {
-                action: 377,
-                menu_id: 219,
-            });
-            actionService.doAction(377, {
-                clearBreadcrumbs: true,
-            });
-            return;
+            if (actionService && typeof actionService.doAction === 'function') {
+                console.log('TRIGAS: volviendo a Codigo de Barras / Operaciones via actionService.doAction', {
+                    action: barcodeOperationsActionId,
+                    menu_id: barcodeMenuId,
+                });
+                actionService.doAction(barcodeOperationsActionId, {
+                    clearBreadcrumbs: true,
+                });
+            } else {
+                console.log('TRIGAS: actionService no disponible, usando fallback href explicito', {
+                    targetUrl,
+                });
+                window.location.href = targetUrl;
+            }
+        } catch (error) {
+            console.log('TRIGAS: error usando actionService, usando fallback href', error);
+            window.location.href = targetUrl;
         }
 
-        console.log('TRIGAS: actionService no disponible, usando fallback href explicito', {
-            targetUrl,
-        });
-    } catch (error) {
-        console.log('TRIGAS: error usando actionService, usando fallback href', error);
-    }
+        setTimeout(function () {
+            if (!trigasIsBarcodeOperationsListScreen()) {
+                window.location.href = targetUrl;
+            }
+        }, 450);
 
-    window.location.href = targetUrl;
+        setTimeout(trigasHideFullWhiteLoadingOverlayAfterReady, 1000);
+    }, opts.delayMs || 250);
+}
+
+function trigasGoToBarcodeOperations(envOrComponent) {
+    return trigasGoToBarcodeOperationsList(envOrComponent);
 }
 
 function trigasGoToOperaciones(envOrComponent) {
     return trigasGoToBarcodeOperations(envOrComponent);
+}
+
+async function trigasReadPickingStateForPostValidate(pickingId) {
+    const response = await fetch('/web/dataset/call_kw/stock.picking/read', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'call',
+            params: {
+                model: 'stock.picking',
+                method: 'read',
+                args: [[Number(pickingId)], ['state']],
+                kwargs: {},
+            },
+            id: Date.now(),
+        }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+        throw data.error;
+    }
+
+    return data.result && data.result[0] ? data.result[0].state : '';
+}
+
+function trigasGoToOperationsListWhenPickingDone(pickingId, label) {
+    if (!pickingId) {
+        return;
+    }
+
+    const startedAt = Date.now();
+    const maxWaitMs = 10000;
+    const flowLabel = label || 'TRIGAS';
+
+    trigasShowFullWhiteLoadingOverlay('Procesando...');
+
+    async function check() {
+        try {
+            const state = await trigasReadPickingStateForPostValidate(pickingId);
+            if (state === 'done') {
+                console.log(flowLabel + ': validacion completada, retorno a Operaciones');
+                trigasGoToBarcodeOperationsList(null, {
+                    showOverlay: true,
+                    delayMs: 300,
+                    message: 'Procesando...',
+                });
+                return;
+            }
+        } catch (error) {
+            console.log(flowLabel + ': esperando estado done tras validar', error);
+        }
+
+        if (Date.now() - startedAt < maxWaitMs) {
+            setTimeout(check, 500);
+            return;
+        }
+
+        console.log(flowLabel + ': no se confirmo done, quitando overlay post-validacion');
+        trigasHideFullWhiteLoadingOverlayAfterReady();
+    }
+
+    setTimeout(check, 500);
 }
 
 // Limpieza global del botón de firma Trigas.
@@ -3481,7 +3690,14 @@ async function trigasTempHandleFinalScan(scannedValue) {
         const destinationValidation = await trigasTempValidateDestinationInBackend(scannedValue);
 
         if (destinationValidation.ok && destinationValidation.is_location) {
+            const destinationName = (
+                destinationValidation.location_name ||
+                destinationValidation.destination_name ||
+                destinationValidation.location ||
+                scannedValue
+            );
             trigasTempSetDestinationRead(true);
+            trigasTempSetDestinationName(destinationName);
             trigasTempShowPdaMessage(destinationValidation.message || 'Ubicación destino confirmada.', 'success');
             trigasTri1AddScanLog(scannedValue, 'location', 'Ubicación destino leída');
             window.trigasTempRenderSerialListSafe(false);
@@ -3685,6 +3901,51 @@ function trigasFinalFindDisplayedDestinationName() {
     return destinationLine || '';
 }
 
+function trigasFinalIsTri1Screen() {
+    const text = document.body ? (document.body.innerText || '') : '';
+    return !!document.querySelector('.o_barcode_client_action') && text.includes('WH/TRI1/');
+}
+
+async function trigasFinalSyncTri1DestinationFromScreen() {
+    if (!trigasFinalIsTri1Screen() || trigasTempIsDestinationRead()) {
+        return false;
+    }
+
+    const displayedDestination = trigasFinalFindDisplayedDestinationName();
+    if (!displayedDestination) {
+        return false;
+    }
+
+    const validation = await trigasTempValidateDestinationInBackend(displayedDestination);
+    if (!validation || !validation.ok || !validation.is_location) {
+        return false;
+    }
+
+    const destinationName = (
+        validation.location_name ||
+        validation.destination_name ||
+        displayedDestination
+    );
+
+    trigasTempSetDestinationRead(true);
+    trigasTempSetDestinationName(destinationName);
+
+    if (typeof trigasTempRenderDestinationStatus === 'function') {
+        trigasTempRenderDestinationStatus();
+    }
+    if (typeof trigasFinalRenderDestinationStatus === 'function') {
+        trigasFinalRenderDestinationStatus();
+    }
+    if (typeof trigasTempRefreshValidateState === 'function') {
+        trigasTempRefreshValidateState();
+    }
+    if (typeof trigasFinalRefreshState === 'function') {
+        trigasFinalRefreshState();
+    }
+
+    return true;
+}
+
 function trigasFinalDetectDestinationReadFromScreen() {
     /*
        IMPORTANTE:
@@ -3698,6 +3959,22 @@ function trigasFinalDetectDestinationReadFromScreen() {
     */
     return trigasTempIsDestinationRead();
 }
+
+let trigasFinalTri1DestinationSyncRunning = false;
+setInterval(async () => {
+    if (trigasFinalTri1DestinationSyncRunning) {
+        return;
+    }
+
+    trigasFinalTri1DestinationSyncRunning = true;
+    try {
+        await trigasFinalSyncTri1DestinationFromScreen();
+    } catch (error) {
+        console.log('TRIGAS TRI1: no se pudo sincronizar ubicación visible', error);
+    } finally {
+        trigasFinalTri1DestinationSyncRunning = false;
+    }
+}, 700);
 
 function trigasFinalSetValidateButtonState(enabled) {
     const bodyText = document.body ? (document.body.innerText || '') : '';
@@ -5991,6 +6268,36 @@ function trigasFixApplyValidateGreenState() {
         box.textContent = message || 'No se pudo sincronizar la ubicación del cliente.';
     }
 
+    async function trigasC2ReadPickingState(pickingId) {
+        const response = await fetch('/web/dataset/call_kw/stock.picking/read', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'call',
+                params: {
+                    model: 'stock.picking',
+                    method: 'read',
+                    args: [[Number(pickingId)], ['state']],
+                    kwargs: {},
+                },
+                id: Date.now(),
+            }),
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            throw data.error;
+        }
+
+        return data.result && data.result[0] ? data.result[0].state : '';
+    }
+
+    function trigasC2GoToOperationsWhenDone(pickingId) {
+        trigasGoToOperationsListWhenPickingDone(pickingId, 'TRIGAS TRI2');
+    }
+
     function trigasC2LooksLikeConduce2Screen() {
         const text = document.body ? document.body.innerText : '';
         return (
@@ -6036,42 +6343,16 @@ function trigasFixApplyValidateGreenState() {
                 return;
             }
 
-            // TRIGAS REGLA 1 — TRI2: redirigir a Pantalla de Operaciones tras validar
-            // Importante: instalar listener ANTES de liberar el click nativo.
-            // Si se instala después, Odoo puede validar/cambiar hash demasiado rápido
-            // y el retorno a Operaciones no ocurre.
-            (function () {
-                if (window.__trigasTri2HashChangePending) {
-                    return;
-                }
-                window.__trigasTri2HashChangePending = true;
-
-                function onTri2Validated() {
-                    window.removeEventListener('hashchange', onTri2Validated);
-                    clearTimeout(cleanupTri2Timer);
-                    window.__trigasTri2HashChangePending = false;
-                    trigasGoToOperaciones();
-                }
-
-                window.addEventListener('hashchange', onTri2Validated);
-
-                var cleanupTri2Timer = setTimeout(function () {
-                    window.removeEventListener('hashchange', onTri2Validated);
-                    window.__trigasTri2HashChangePending = false;
-                }, 8000);
-            })();
+            const pickingId = trigasC2GetPickingIdFromUrl();
 
             btn.__trigasC2ValidatedAndReleased = true;
             btn.click();
 
             // TRIGAS TRI2 FALLBACK:
             // En algunos casos Odoo valida el Conduce 2 sin disparar hashchange.
-            // Por eso forzamos el retorno a Operaciones luego de soltar el click nativo.
-            console.log('TRIGAS TRI2: click nativo liberado, programando retorno a Operaciones');
-            setTimeout(function () {
-                console.log('TRIGAS TRI2: fallback retorno a Operaciones ejecutado');
-                trigasGoToOperaciones();
-            }, 1200);
+            // Por eso esperamos confirmación backend state=done antes de retornar.
+            console.log('TRIGAS TRI2: click nativo liberado, esperando validación done');
+            trigasC2GoToOperationsWhenDone(pickingId);
         }, true);
     }
 
@@ -7757,21 +8038,19 @@ function trigasFixApplyValidateGreenState() {
         var txt = (btn.innerText || btn.textContent || '').trim().toLowerCase();
         if (!txt.includes('validar')) return;
 
-        // Evitar instalar listener duplicado si el click es el segundo (allow-after-save)
-        if (window.__trigasTri1HashChangePending) return;
-        window.__trigasTri1HashChangePending = true;
+        // No detenemos el click nativo. Solo esperamos confirmacion backend done.
+        if (window.__trigasTri1PostValidateDonePolling) return;
+        window.__trigasTri1PostValidateDonePolling = true;
 
-        function onTri1Validated() {
-            window.removeEventListener('hashchange', onTri1Validated);
-            clearTimeout(cleanupTri1Timer);
-            window.__trigasTri1HashChangePending = false;
-            trigasGoToOperaciones();
-        }
-        window.addEventListener('hashchange', onTri1Validated);
-        var cleanupTri1Timer = setTimeout(function () {
-            window.removeEventListener('hashchange', onTri1Validated);
-            window.__trigasTri1HashChangePending = false;
-        }, 8000);
+        var pickingId = typeof trigasTempGetPickingId === 'function'
+            ? trigasTempGetPickingId()
+            : false;
+
+        trigasGoToOperationsListWhenPickingDone(pickingId, 'TRIGAS TRI1');
+
+        setTimeout(function () {
+            window.__trigasTri1PostValidateDonePolling = false;
+        }, 12000);
     }, true);
 
     console.log('TRIGAS REGLA 1: TRI1 post-validate navigation activo');
@@ -8118,6 +8397,10 @@ function trigasFixApplyValidateGreenState() {
 
     document.addEventListener('click', function (event) {
         if (!trigasLooksLikeBarcodePickingScreen()) return;
+        const screenText = document.body ? (document.body.innerText || '') : '';
+        if (screenText.includes('WH/TRI1/') || screenText.includes('WH/TRI2/')) return;
+        const isTri3Screen = screenText.includes('WH/TRI3/');
+        const isInternalScreen = screenText.includes('WH/INT/');
 
         const btn = event.target && event.target.closest
             ? event.target.closest('button, a, .btn')
@@ -8128,6 +8411,14 @@ function trigasFixApplyValidateGreenState() {
         console.log('TRIGAS GLOBAL: validar detectado, programando retorno a Operaciones.');
 
         // No detenemos el click. Dejamos que Odoo valide normalmente.
+        if (isTri3Screen || isInternalScreen) {
+            const match = String(window.location.hash || '').match(/active_id=(\d+)/);
+            const pickingId = match ? match[1] : '';
+            const label = isTri3Screen ? 'TRIGAS TRI3' : 'TRIGAS INTERNA';
+            trigasGoToOperationsListWhenPickingDone(pickingId, label);
+            return;
+        }
+
         trigasShowPostValidateTransition();
         trigasScheduleGoToOperacionesAfterValidate();
     }, true);
