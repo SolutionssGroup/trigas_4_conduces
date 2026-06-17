@@ -9,6 +9,29 @@ import GroupedLineComponent from '@stock_barcode/components/grouped_line';
 import { patch } from '@web/core/utils/patch';
 import { _t } from '@web/core/l10n/translation';
 
+/*
+ * MAPA DE LIMPIEZA - NO CAMBIAR COMPORTAMIENTO
+ *
+ * Este archivo conserva logica legacy de varios flujos PDA. Para refactorizar
+ * con seguridad, mantener separadas estas zonas:
+ *
+ * 1. GLOBAL:
+ *    helpers de navegacion, deteccion de pantallas, observers y estilos comunes.
+ * 2. PATCH PRINCIPAL BARCODE:
+ *    intercepta escaneos y delega por paso TRI1/TRI2/TRI3/Interna.
+ * 3. TRI1:
+ *    seriales seleccionados, contador, destino camion, validar y retorno.
+ * 4. TRI2:
+ *    cliente destino, firma, validar, retorno y lista de seriales de sesion
+ *    (helpers puros en trigas_barcode_tri2.js).
+ * 5. TRI3:
+ *    recogida abierta, firma frontend, cancelar y navegacion.
+ * 6. TRANSFERENCIA INTERNA:
+ *    destino interno, visual, validar/cancelar y limpieza de lista.
+ *
+ * Fase 1 solo marca secciones. No mover funciones en este cambio.
+ */
+
 /* =========================================================
    TRIGAS FASE 0 - GLOBAL / NAVEGACION / HELPERS
    Comentarios de separacion solamente. No tocar logica aqui.
@@ -314,6 +337,14 @@ function trigasHighlightAndScrollLastScannedLine() {
    ========================================================= */
 
 patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
+
+    /*
+     * PATCH PRINCIPAL BARCODE
+     *
+     * Punto de entrada compartido para escaneos. La regla de limpieza es:
+     * validar el paso actual y delegar lo antes posible; no mezclar aqui
+     * estado visual especifico de TRI1/TRI2/TRI3/Interna salvo compatibilidad.
+     */
 
     async _loadData(...args) {
         const result = originalLoadData ? await originalLoadData.apply(this, args) : undefined;
@@ -5806,6 +5837,8 @@ function trigasFixApplyValidateGreenState() {
 /* =========================================================
    TRIGAS FASE 0 - TRI2 / FIRMA
    Estado frontend de ubicacion cliente y sincronizacion antes de validar.
+   Mantener separado de TRI1/TRI3. Los helpers puros de lista visual viven en
+   static/src/js/trigas_barcode_tri2.js.
    ========================================================= */
 
 /* TRIGAS FIX FINAL - Conduce 2 client location frontend state and sync */
