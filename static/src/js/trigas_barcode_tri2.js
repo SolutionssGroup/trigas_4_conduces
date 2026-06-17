@@ -27,6 +27,25 @@ function tri2NormalizeSerialItems(items) {
         .filter(Boolean);
 }
 
+function tri2NormalizeSerialName(result, fallbackBarcode = '') {
+    const values = [
+        result?.lot_name,
+        result?.name,
+        result?.display_name,
+        result?.barcode,
+        fallbackBarcode,
+    ];
+
+    for (const value of values) {
+        const serialName = String(value || '').trim();
+        if (serialName) {
+            return serialName;
+        }
+    }
+
+    return '';
+}
+
 function tri2GetCounterSerials() {
     if (typeof window.trigasTempGetSerials !== 'function') {
         return false;
@@ -307,6 +326,7 @@ window.TrigasBarcodeTri2 = {
     getExpectedQty: tri2GetExpectedQtyFromScreen,
     getSessionSerials: tri2GetSessionSerials,
     setSessionSerials: tri2SetSessionSerials,
+    normalizeSerialName: tri2NormalizeSerialName,
     canAcceptSerial: tri2CanAcceptSerial,
     recordSerial: tri2RecordSerial,
     renderSessionSerials: tri2RenderSessionSerials,

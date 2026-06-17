@@ -1542,13 +1542,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
                 return false;
             }
 
-            const tri2SerialName = (
-                parsedBarcodeData.lot.name ||
-                parsedBarcodeData.lot.display_name ||
-                parsedBarcodeData.lot.barcode ||
-                barcode ||
-                ''
-            ).toString().trim();
+            const tri2SerialName = window.TrigasBarcodeTri2.normalizeSerialName(parsedBarcodeData.lot, barcode);
             const tri2ExpectedQty = window.TrigasBarcodeTri2
                 ? window.TrigasBarcodeTri2.getExpectedQty()
                 : 0;
@@ -1618,13 +1612,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
 
         if (step === '2' && parsedBarcodeData?.lot?.id && window.TrigasBarcodeTri2) {
-            const tri2SerialName = (
-                parsedBarcodeData.lot.name ||
-                parsedBarcodeData.lot.display_name ||
-                parsedBarcodeData.lot.barcode ||
-                barcode ||
-                ''
-            ).toString().trim();
+            const tri2SerialName = window.TrigasBarcodeTri2.normalizeSerialName(parsedBarcodeData.lot, barcode);
             window.TrigasBarcodeTri2.recordSerial(tri2SerialName, {
                 expectedQty: window.TrigasBarcodeTri2.getExpectedQty(),
             });
@@ -1691,12 +1679,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
 
         if (step === '2' && barcodeData?.lot?.id) {
-            const tri2SerialName = (
-                barcodeData.lot.name ||
-                barcodeData.lot.display_name ||
-                barcodeData.lot.barcode ||
-                ''
-            ).toString().trim();
+            const tri2SerialName = window.TrigasBarcodeTri2.normalizeSerialName(barcodeData.lot);
             const tri2ExpectedQty = window.TrigasBarcodeTri2
                 ? window.TrigasBarcodeTri2.getExpectedQty()
                 : 0;
@@ -1756,12 +1739,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
 
         if (step === '2' && barcodeData?.lot?.id && window.TrigasBarcodeTri2) {
-            const tri2SerialName = (
-                barcodeData.lot.name ||
-                barcodeData.lot.display_name ||
-                barcodeData.lot.barcode ||
-                ''
-            ).toString().trim();
+            const tri2SerialName = window.TrigasBarcodeTri2.normalizeSerialName(barcodeData.lot);
             window.TrigasBarcodeTri2.recordSerial(tri2SerialName, {
                 expectedQty: window.TrigasBarcodeTri2.getExpectedQty(),
             });
