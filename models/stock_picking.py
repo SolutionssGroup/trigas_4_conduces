@@ -697,6 +697,47 @@ class StockPicking(models.Model):
 
         return True
 
+    def _trigas_validate_step_1_serial_physical_availability(self, lot):
+        self.ensure_one()
+
+        if not self._trigas_barcode_is_truck_step():
+            return True
+
+        allowed_moves = self.move_ids_without_package.filtered(
+            lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce
+        )
+
+        positive_quants = self.env['stock.quant'].search([
+            ('lot_id', '=', lot.id),
+            ('product_id', '=', lot.product_id.id),
+            ('quantity', '>', 0),
+        ])
+        positive_locations = positive_quants.mapped('location_id')
+
+        if not positive_locations:
+            raise UserError(_('Este serial no tiene existencia disponible en almacén.'))
+
+        if len(positive_locations) > 1:
+            raise UserError(_('Este serial tiene existencia en más de una ubicación. Debe corregirse antes de cargarlo.'))
+
+        current_location = positive_locations[0]
+        if current_location.usage == 'customer' or (current_location.complete_name or '').startswith('CLIENTES_TRIGAS/'):
+            raise UserError(_(
+                'Este serial no está disponible para cargar al camión. Ubicación actual: %s.'
+            ) % current_location.display_name)
+
+        source_locations = (self.location_id | allowed_moves.mapped('location_id')).filtered(lambda location: location)
+        valid_source_locations = self.env['stock.location'].search([
+            ('id', 'child_of', source_locations.ids),
+        ]) if source_locations else self.env['stock.location']
+
+        if current_location not in valid_source_locations:
+            raise UserError(_(
+                'Este serial no está disponible para cargar al camión. Ubicación actual: %s.'
+            ) % current_location.display_name)
+
+        return True
+
     def trigas_barcode_validate_serial_step_1(self, lot_id, client_lot_ids=None):
         self.ensure_one()
 
@@ -707,12 +748,6 @@ class StockPicking(models.Model):
         if not lot:
             raise UserError(_('Serial no encontrado.'))
 
-        duplicate_line = self.move_line_ids.filtered(
-            lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
-        )
-        if duplicate_line:
-            raise UserError(_('El serial %s ya fue escaneado en este conduce.') % lot.name)
-
         allowed_moves = self.move_ids_without_package.filtered(
             lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce
         )
@@ -721,6 +756,14 @@ class StockPicking(models.Model):
 
         if lot.product_id.id not in allowed_moves.mapped('product_id').ids:
             raise UserError(_('El serial %s no pertenece a los productos definidos en esta orden.') % lot.name)
+
+        self._trigas_validate_step_1_serial_physical_availability(lot)
+
+        duplicate_line = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id.id == lot.id and ml.qty_done > 0
+        )
+        if duplicate_line:
+            raise UserError(_('El serial %s ya fue escaneado en este conduce.') % lot.name)
 
         expected_qty = sum(allowed_moves.mapped('product_uom_qty'))
 
@@ -1085,6 +1128,15 @@ class StockPicking(models.Model):
                 },
             }
 
+        if self._trigas_barcode_is_truck_step():
+            try:
+                self._trigas_validate_step_1_serial_physical_availability(lot)
+            except UserError as e:
+                return {
+                    'ok': False,
+                    'message': str(e),
+                }
+
         return {
             'ok': True,
             'serial': serial_name,
@@ -1119,6 +1171,13 @@ class StockPicking(models.Model):
                 'No puedes guardar más seriales que la cantidad esperada. '
                 'Cantidad esperada: %s. Cantidad recibida: %s.'
             ) % (expected_qty, len(serial_names)))
+
+        if self._trigas_barcode_is_truck_step():
+            for serial_name in serial_names:
+                lot = self.env['stock.lot'].search([('name', '=', serial_name)], limit=1)
+                if not lot:
+                    raise UserError(_('No se encontró el serial %s.') % serial_name)
+                self._trigas_validate_step_1_serial_physical_availability(lot)
 
         # TRI1 usa una lista seleccionada por PDA. Al reabrir o reservar, Odoo puede
         # dejar líneas con lot_id y qty_done = 0; deben reemplazarse, no acumularse.
