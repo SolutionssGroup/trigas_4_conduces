@@ -2238,6 +2238,100 @@ function trigasUpdateTri1DriverListHintSafe(isTri1ListScreen) {
     });
 }
 
+function trigasEnsureTri2DriverCardStyleSafe() {
+    if (document.getElementById('trigas_tri2_driver_card_style')) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'trigas_tri2_driver_card_style';
+    style.textContent = `
+        body.trigas-tri2-list-active .o_kanban_record .o_priority,
+        body.trigas-tri2-list-active .o_kanban_record .o_priority_star,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_priority,
+        body.trigas-tri2-list-active .o_kanban_record .fa-star,
+        body.trigas-tri2-list-active .o_kanban_record .fa-star-o,
+        body.trigas-tri2-list-active .o_kanban_record .fa-desktop,
+        body.trigas-tri2-list-active .o_kanban_record .fa-television,
+        body.trigas-tri2-list-active .o_kanban_record .fa-tv,
+        body.trigas-tri2-list-active .o_kanban_record .fa-user,
+        body.trigas-tri2-list-active .o_kanban_record .o_activity,
+        body.trigas-tri2-list-active .o_kanban_record .o_kanban_activity,
+        body.trigas-tri2-list-active .o_kanban_record .o_mail_activity,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_activity,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_kanban_activity,
+        body.trigas-tri2-list-active .o_kanban_record .o_ActivityButtonView,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_many2one_avatar_user,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_many2one_avatar,
+        body.trigas-tri2-list-active .o_kanban_record .o_kanban_avatar,
+        body.trigas-tri2-list-active .o_kanban_record .oe_kanban_avatar,
+        body.trigas-tri2-list-active .o_kanban_record .o_m2m_avatar,
+        body.trigas-tri2-list-active .o_kanban_record .o_m2o_avatar,
+        body.trigas-tri2-list-active .o_kanban_record .o_field_many2one_avatar_user img,
+        body.trigas-tri2-list-active .o_kanban_record img.o_avatar,
+        body.trigas-tri2-list-active .o_kanban_record img[src*="avatar"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        body.trigas-tri2-list-active .o_kanban_record .o_kanban_record_title .text-muted,
+        body.trigas-tri2-list-active .o_kanban_record .o_kanban_record_title span.text-muted {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        body.trigas-tri2-list-active .o_kanban_record .badge,
+        body.trigas-tri2-list-active .o_kanban_record .o_badge {
+            display: inline-flex !important;
+            visibility: visible !important;
+        }
+
+        body.trigas-tri2-list-active .o_control_panel .o_cp_buttons,
+        body.trigas-tri2-list-active .o_mobile_control_panel .o_cp_buttons,
+        body.trigas-tri2-list-active .o_control_panel .o_list_button_add,
+        body.trigas-tri2-list-active .o_mobile_control_panel .o_list_button_add,
+        body.trigas-tri2-list-active .o_control_panel .o-kanban-button-new,
+        body.trigas-tri2-list-active .o_mobile_control_panel .o-kanban-button-new {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        body.trigas-tri2-list-active .o_kanban_tip_filter {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            margin: 8px 12px 12px !important;
+            color: #111827 !important;
+            font-size: 16px !important;
+            font-weight: 800 !important;
+            line-height: 1.3 !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function trigasUpdateTri2DriverListHintSafe(isTri2ListScreen) {
+    if (!document.body || !isTri2ListScreen) {
+        return;
+    }
+
+    const nativeHint = 'escanee un traslado o un producto para filtrar sus registros';
+    const driverHint = 'Elija la orden de venta que desea entregar';
+
+    document.querySelectorAll('.o_kanban_tip_filter').forEach((element) => {
+        const currentText = String(element.textContent || '').trim();
+        const normalizedText = currentText
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+        if (normalizedText.includes(nativeHint)) {
+            element.textContent = driverHint;
+        }
+    });
+}
+
 function trigasRestoreNativePickingTypeKanbanSafe() {
     if (!document.body) {
         return;
@@ -2330,6 +2424,16 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
         )
     );
 
+    const isTri2ListScreen = (
+        !isPickingTypeOperationsScreen &&
+        !hasBarcodeClientAction &&
+        !isTri3ListScreen &&
+        (
+            normalizedText.includes('entrega a cliente') ||
+            normalizedText.includes('wh/tri2/')
+        )
+    );
+
     const isTrigasListScreen = (
         normalizedText.includes('entrega a camion') ||
         normalizedText.includes('entrega a cliente') ||
@@ -2377,6 +2481,7 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
     );
 
     trigasEnsureTri1DriverCardStyleSafe();
+    trigasEnsureTri2DriverCardStyleSafe();
 
     document.body.classList.toggle(
         'trigas-tri1-list-active',
@@ -2385,6 +2490,15 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
     trigasUpdateTri1DriverListHintSafe(isTri1ListScreen && !isNativeInternalTransferScreen);
     setTimeout(function () {
         trigasUpdateTri1DriverListHintSafe(isTri1ListScreen && !isNativeInternalTransferScreen);
+    }, 150);
+
+    document.body.classList.toggle(
+        'trigas-tri2-list-active',
+        isTri2ListScreen && !isNativeInternalTransferScreen
+    );
+    trigasUpdateTri2DriverListHintSafe(isTri2ListScreen && !isNativeInternalTransferScreen);
+    setTimeout(function () {
+        trigasUpdateTri2DriverListHintSafe(isTri2ListScreen && !isNativeInternalTransferScreen);
     }, 150);
 
     // Clase específica para la lista de Recogida de Cilindros (TRI3).
