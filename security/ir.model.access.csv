@@ -1,4 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_trigas_delivery_signature_wizard,trigas.delivery.signature.wizard,model_trigas_delivery_signature_wizard,base.group_user,1,1,1,1
 access_trigas_delivery_signature_record,trigas.delivery.signature.record,model_trigas_delivery_signature_record,base.group_user,1,1,1,1
-access_x_choferes,x_choferes,model_x_choferes,base.group_user,1,1,1,1

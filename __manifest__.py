@@ -14,6 +14,7 @@
     ],
     'data': [
         'security/ir.model.access.csv',
+        'security/x_choferes_access.xml',
         'data/stock_picking_type_data.xml',
         'data/mail_template_data.xml',
         'views/product_views.xml',
