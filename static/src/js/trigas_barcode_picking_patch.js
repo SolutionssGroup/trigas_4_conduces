@@ -163,7 +163,7 @@ function trigasIsBarcodeOperationsListScreen() {
         .replace(/[\u0300-\u036f]/g, '');
 
     return (
-        route.includes('action=377') &&
+        route.includes('action=908') &&
         route.includes('model=stock.picking.type') &&
         bodyText.includes('entrega a camion') &&
         bodyText.includes('entrega a cliente') &&
@@ -173,72 +173,45 @@ function trigasIsBarcodeOperationsListScreen() {
 
 function trigasGoToBarcodeOperationsList(envOrComponent, options) {
     const opts = options || {};
-    const barcodeOperationsActionId = 377;
-    const barcodeMenuId = 219;
-    const targetUrl = '/web#action=377&model=stock.picking.type&view_type=kanban&menu_id=219&cids=1';
-    const pickingName = trigasGetCurrentBarcodePickingNameSafe();
+
+    /*
+     * TRIGAS:
+     * Retorno fuerte a la pantalla de Operaciones Barcode.
+     * Usamos query timestamp para forzar recarga real y evitar que el overlay blanco
+     * se quede pegado cuando Odoo solo cambia el hash.
+     */
+    const targetHash = '#action=908&model=stock.picking.type&view_type=kanban&menu_id=581&cids=1';
+    const targetUrl = '/web?trigas_return=' + Date.now() + targetHash;
 
     if (opts.showOverlay === true) {
         trigasShowFullWhiteLoadingOverlay(opts.message || 'Procesando...');
     }
 
-    if (/WH\/TRI1\//i.test(pickingName)) {
-        console.log('TRIGAS TRI1 POST VALIDATE NAV', {
-            pickingName,
-            currentHash: window.location.hash,
-            currentPath: window.location.href,
-            target: 'barcode_operations',
-            targetAction: barcodeOperationsActionId,
-            targetMenu: barcodeMenuId,
-        });
-    }
+    console.log('TRIGAS: retorno fuerte a Operaciones Barcode', {
+        targetUrl,
+        currentUrl: window.location.href,
+        delayMs: opts.delayMs || 1000,
+    });
 
-    /*
-     * TRIGAS:
-     * Volver a Codigo de Barras / Operaciones sin depender del menu anterior.
-     * Primero intenta usar el action service interno de Odoo.
-     * Si no esta disponible, usa un fallback explicito a la accion de
-     * Operaciones de stock_barcode.
-     */
     setTimeout(function () {
-        try {
-            const barcodeEl = document.querySelector('.o_barcode_client_action');
-            const owlComponent = barcodeEl && barcodeEl.__owl__ && barcodeEl.__owl__.component;
+        window.location.replace(targetUrl);
 
-            const actionService =
-                (envOrComponent && envOrComponent.actionService) ||
-                (envOrComponent && envOrComponent.env && envOrComponent.env.services && envOrComponent.env.services.action) ||
-                (envOrComponent && envOrComponent.services && envOrComponent.services.action) ||
-                (owlComponent && owlComponent.actionService) ||
-                (owlComponent && owlComponent.env && owlComponent.env.services && owlComponent.env.services.action);
-
-            if (actionService && typeof actionService.doAction === 'function') {
-                console.log('TRIGAS: volviendo a Codigo de Barras / Operaciones via actionService.doAction', {
-                    action: barcodeOperationsActionId,
-                    menu_id: barcodeMenuId,
-                });
-                actionService.doAction(barcodeOperationsActionId, {
-                    clearBreadcrumbs: true,
-                });
-            } else {
-                console.log('TRIGAS: actionService no disponible, usando fallback href explicito', {
-                    targetUrl,
-                });
-                window.location.href = targetUrl;
-            }
-        } catch (error) {
-            console.log('TRIGAS: error usando actionService, usando fallback href', error);
-            window.location.href = targetUrl;
-        }
-
+        /*
+         * Refuerzo: si por alguna razón Odoo intercepta la navegación y no recarga,
+         * quitamos el overlay y forzamos la URL otra vez.
+         */
         setTimeout(function () {
-            if (!trigasIsBarcodeOperationsListScreen()) {
+            try {
+                trigasHideFullWhiteLoadingOverlayAfterReady();
+            } catch (error) {
+                console.log('TRIGAS: no se pudo ocultar overlay post retorno', error);
+            }
+
+            if (!String(window.location.href || '').includes('action=908')) {
                 window.location.href = targetUrl;
             }
-        }, 450);
-
-        setTimeout(trigasHideFullWhiteLoadingOverlayAfterReady, 1000);
-    }, opts.delayMs || 250);
+        }, 2500);
+    }, opts.delayMs || 1000);
 }
 
 function trigasGoToBarcodeOperations(envOrComponent) {
@@ -1463,7 +1436,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
     _trigasIsTri3NativeScreen() {
         const bodyText = document.body ? (document.body.innerText || '') : '';
-        return bodyText.includes('WH/TRI3/');
+        return bodyText.includes('/TRI3/');
     },
 
     async _trigasProcessTri3AnyOriginSerial(barcodeData) {
@@ -2457,7 +2430,7 @@ function trigasUpdateBarcodeVisualScopeClassSafe() {
         normalizedText.includes('crear un nuevo traslado')
     );
 
-    // El detalle/escaneo de TRI3 (WH/TRI3/...) sigue siendo 100% nativo: tiene
+    // El detalle/escaneo de TRI3 (/TRI3/...) sigue siendo 100% nativo: tiene
     // su propio flujo y estilos dedicados (trigas-tri3-*). Solo el listado de
     // traslados pendientes ("Recogida de Cilindros") se integra al diseño
     // amigable común.
@@ -3142,7 +3115,7 @@ if (!window.__trigasTempSerialFrontendStarted) {
             TRI3 Recogida Cliente usa su propio flujo nativo personalizado.
             No debe pasar por este validador viejo de contador 0/3.
         */
-        if (document.body && (document.body.innerText || '').includes('WH/TRI3/')) {
+        if (document.body && (document.body.innerText || '').includes('/TRI3/')) {
             return;
         }
 
@@ -3495,8 +3468,8 @@ if (!window.__trigasKeyboardScannerCaptureStarted) {
 
                 // No interferir con TRI3
                 if (
-                    window.location.href.includes('WH/TRI3/') ||
-                    (window.location.hash.includes('active_id=') && document.body && (document.body.innerText || '').includes('WH/TRI3/'))
+                    window.location.href.includes('/TRI3/') ||
+                    (window.location.hash.includes('active_id=') && document.body && (document.body.innerText || '').includes('/TRI3/'))
                 ) {
                     return;
                 }
@@ -3666,7 +3639,7 @@ function trigasTempSetValidateEnabled(enabled) {
 
     // Este controlador general pertenece al Conduce 1.
     // En Conduce 2 el botón VALIDAR lo controla trigasC2FlowControlValidateButton.
-    if (bodyText.includes('WH/TRI2/')) {
+    if (bodyText.includes('/TRI2/')) {
         return;
     }
 
@@ -3934,14 +3907,9 @@ async function trigasTempHandleFinalScan(scannedValue) {
             return true;
         }
 
-        // Si ya está completo y lee otra cosa que no es ubicación, mostramos error.
-        trigasTempSetDestinationRead(false);
-        trigasTempShowPdaMessage(
-            'Ya se completaron los ' + expectedQty + ' seriales esperados. Elimine uno si desea cambiarlo.',
-            'error'
-        );
-        window.trigasTempRenderSerialListSafe(false);
-        trigasTempRefreshValidateState();
+        // No bloquear aquí por expectedQty frontend.
+        // El backend valida la cantidad real esperada.
+        console.log('TRIGAS: lectura adicional no es ubicación; backend validará expectedQty', expectedQty);
         return false;
     }
 
@@ -3990,8 +3958,8 @@ if (!window.__trigasFinalValidateBlockStarted) {
             No debe usar el validador viejo de contador 0/3.
         */
         if (
-            window.location.href.includes('WH/TRI3/') ||
-            window.location.hash.includes('active_id=') && document.body && (document.body.innerText || '').includes('WH/TRI3/')
+            window.location.href.includes('/TRI3/') ||
+            window.location.hash.includes('active_id=') && document.body && (document.body.innerText || '').includes('/TRI3/')
         ) {
             return;
         }
@@ -4133,7 +4101,7 @@ function trigasFinalFindDisplayedDestinationName() {
 
 function trigasFinalIsTri1Screen() {
     const text = document.body ? (document.body.innerText || '') : '';
-    return !!document.querySelector('.o_barcode_client_action') && text.includes('WH/TRI1/');
+    return !!document.querySelector('.o_barcode_client_action') && text.includes('/TRI1/');
 }
 
 async function trigasFinalSyncTri1DestinationFromScreen() {
@@ -4211,7 +4179,7 @@ function trigasFinalSetValidateButtonState(enabled) {
 
     // Este controlador general pertenece al Conduce 1.
     // En Conduce 2 el botón VALIDAR lo controla trigasC2FlowControlValidateButton.
-    if (bodyText.includes('WH/TRI2/')) {
+    if (bodyText.includes('/TRI2/')) {
         return;
     }
 
@@ -4678,7 +4646,7 @@ console.log('TRIGAS PDA: contador fuerte activo');
 
 /* =========================================================
    TRIGAS PDA - Corrección definitiva del contador 0 / 3
-   Evita confundir WH/TRI1/00010 con cantidades.
+   Evita confundir /TRI1/00010 con cantidades.
    ========================================================= */
 
 function trigasCounterGetExpectedKey() {
@@ -4757,7 +4725,7 @@ function trigasCounterFindNativeCounter() {
     }
 
     // Caso 1: contador en un mismo texto: "0 / 3"
-    // Importante: no acepta cosas pegadas a letras como WH/TRI1/00010.
+    // Importante: no acepta cosas pegadas a letras como /TRI1/00010.
     for (const textNode of textNodes) {
         const txt = textNode.nodeValue || '';
         const match = txt.match(/(^|[^A-Za-z0-9])(\d+)\s*\/\s*(\d+)(?=$|[^A-Za-z0-9])/);
@@ -4904,7 +4872,7 @@ setTimeout(() => {
     }
 }, 800);
 
-console.log('TRIGAS PDA: contador 0/3 corregido sin confundir WH/TRI1/00010');
+console.log('TRIGAS PDA: contador 0/3 corregido sin confundir /TRI1/00010');
 
 
 /* =========================================================
@@ -6234,7 +6202,7 @@ function trigasFixApplyValidateGreenState() {
     // En WH/TRI2 el botón VALIDAR lo controla únicamente trigasC2FlowControlValidateButton.
     // Si este bloque agrega trigas-validate-disabled-final mientras C2 agrega
     // trigas-c2-validate-blocked, se produce parpadeo visual.
-    if (bodyText.includes('WH/TRI2/')) {
+    if (bodyText.includes('/TRI2/')) {
         return;
     }
 
@@ -6531,7 +6499,7 @@ function trigasFixApplyValidateGreenState() {
     function trigasC2LooksLikeConduce2Screen() {
         const text = document.body ? document.body.innerText : '';
         return (
-            text.includes('WH/TRI2/') ||
+            text.includes('/TRI2/') ||
             text.includes('Conduce 2') ||
             text.includes('CLIENTES_TRIGAS/')
         );
@@ -6663,7 +6631,7 @@ function trigasFixApplyValidateGreenState() {
     function trigasC2SignIsScreen() {
         const text = document.body ? document.body.innerText || '' : '';
         return (
-            text.includes('WH/TRI2/') ||
+            text.includes('/TRI2/') ||
             text.includes('Conduce 2') ||
             text.includes('CLIENTES_TRIGAS/')
         );
@@ -7048,7 +7016,7 @@ function trigasFixApplyValidateGreenState() {
     function trigasC2FlowIsScreen() {
         const text = document.body ? document.body.innerText || '' : '';
         return (
-            text.includes('WH/TRI2/') ||
+            text.includes('/TRI2/') ||
             text.includes('Conduce 2') ||
             text.includes('CLIENTES_TRIGAS/')
         );
@@ -7204,7 +7172,7 @@ function trigasFixApplyValidateGreenState() {
             // Si Conduce 2 limpia estas clases fuera de TRI2, provoca parpadeo:
             // TRI1 agrega trigas-validate-disabled y C2 la quita cada 300ms.
             const bodyText = document.body ? (document.body.innerText || '') : '';
-            if (bodyText.includes('WH/TRI1/')) {
+            if (bodyText.includes('/TRI1/')) {
                 return;
             }
 
@@ -7423,7 +7391,7 @@ function trigasFixApplyValidateGreenState() {
     function isTri3Screen() {
         const text = document.body ? (document.body.innerText || '') : '';
         const hasBarcodeClientAction = !!document.querySelector('.o_barcode_client_action');
-        return hasBarcodeClientAction && text.includes('WH/TRI3/');
+        return hasBarcodeClientAction && text.includes('/TRI3/');
     }
 
     function signedKey() {
@@ -7740,7 +7708,7 @@ function trigasFixApplyValidateGreenState() {
     function isTri3Screen() {
         const text = document.body ? (document.body.innerText || '') : '';
         const hasBarcodeClientAction = !!document.querySelector('.o_barcode_client_action');
-        return hasBarcodeClientAction && text.includes('WH/TRI3/');
+        return hasBarcodeClientAction && text.includes('/TRI3/');
     }
 
     function getPickingId() {
@@ -8258,7 +8226,7 @@ function trigasFixApplyValidateGreenState() {
 
     document.addEventListener('click', function (event) {
         if (!document.body) return;
-        if (!(document.body.innerText || '').includes('WH/TRI1/')) return;
+        if (!(document.body.innerText || '').includes('/TRI1/')) return;
 
         var btn = event.target && event.target.closest
             ? event.target.closest('button, a, .btn')
@@ -8413,9 +8381,9 @@ function trigasFixApplyValidateGreenState() {
 
         return hasBarcodeAction && (
             text.includes('WH/INT/') ||
-            text.includes('WH/TRI1/') ||
-            text.includes('WH/TRI2/') ||
-            text.includes('WH/TRI3/')
+            text.includes('/TRI1/') ||
+            text.includes('/TRI2/') ||
+            text.includes('/TRI3/')
         );
     }
 
@@ -8578,9 +8546,9 @@ function trigasFixApplyValidateGreenState() {
 
             return hasBarcodeAction && (
                 text.includes('WH/INT/') ||
-                text.includes('WH/TRI1/') ||
-                text.includes('WH/TRI2/') ||
-                text.includes('WH/TRI3/')
+                text.includes('/TRI1/') ||
+                text.includes('/TRI2/') ||
+                text.includes('/TRI3/')
             );
         }
 
@@ -8628,8 +8596,8 @@ function trigasFixApplyValidateGreenState() {
     document.addEventListener('click', function (event) {
         if (!trigasLooksLikeBarcodePickingScreen()) return;
         const screenText = document.body ? (document.body.innerText || '') : '';
-        if (screenText.includes('WH/TRI1/') || screenText.includes('WH/TRI2/')) return;
-        const isTri3Screen = screenText.includes('WH/TRI3/');
+        // TRI1 y TRI2 también deben retornar a Operaciones después de validar.
+        const isTri3Screen = screenText.includes('/TRI3/');
         const isInternalScreen = screenText.includes('WH/INT/');
 
         const btn = event.target && event.target.closest
@@ -8665,7 +8633,7 @@ function trigasFixApplyValidateGreenState() {
     function isTri3BarcodeScreen() {
         if (!document.body) return false;
         const text = document.body.innerText || '';
-        return !!document.querySelector('.o_barcode_client_action') && text.includes('WH/TRI3/');
+        return !!document.querySelector('.o_barcode_client_action') && text.includes('/TRI3/');
     }
 
     function cleanupTri3VisualStateOutside() {

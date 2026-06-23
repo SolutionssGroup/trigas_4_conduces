@@ -106,10 +106,10 @@
                  bien visible, el estado destacado con color y un botón de acción grande,
                  fácil de tocar con el dedo en pantallas de PDA.
                  Estos traslados son "nativos" (is_trigas_conduce = False, sin trigas_step),
-                 por lo que se identifican por su referencia WH/TRI3/..., igual que
+                 por lo que se identifican por su referencia /TRI3/..., igual que
                  hace el JS del módulo para detectar la pantalla de Recogida de Cilindros. -->
             <xpath expr="//div[hasclass('o_kanban_record_bottom')]" position="after">
-                <div t-if="record.name.value and record.name.value.indexOf('WH/TRI3/') !== -1"
+                <div t-if="record.name.value and record.name.value.indexOf('/TRI3/') !== -1"
                      class="trigas-tri3-kanban-footer">
                     <div class="trigas-tri3-kanban-footer-info">
                         <span class="trigas-tri3-kanban-origin">

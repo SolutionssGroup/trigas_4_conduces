@@ -2,7 +2,7 @@
 
 /*
  * TRIGAS - TRI2 Entrega a Cliente
- * Este archivo contendra unicamente la logica del flujo WH/TRI2/.
+ * Este archivo contendra unicamente la logica del flujo /TRI2/.
  * Lista visual de seriales leidos en la sesion PDA.
  */
 
@@ -119,7 +119,7 @@ function tri2IsScreen() {
     const text = document.body ? (document.body.innerText || '') : '';
     return (
         !!document.querySelector('.o_barcode_client_action') &&
-        text.includes('WH/TRI2/')
+        text.includes('/TRI2/')
     );
 }
 
@@ -296,12 +296,9 @@ function tri2CanAcceptSerial(serialName, expectedQty) {
         };
     }
 
-    if (expectedQty && serials.length >= expectedQty) {
-        return {
-            ok: false,
-            message: 'Ya se leyeron los ' + expectedQty + ' seriales esperados.',
-        };
-    }
+    // No bloquear por expectedQty en frontend.
+    // El backend valida la cantidad real esperada del picking.
+    console.log('TRIGAS TRI2: límite frontend expectedQty ignorado; backend validará', expectedQty, serials.length);
 
     return { ok: true };
 }

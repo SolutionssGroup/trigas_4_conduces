@@ -2,7 +2,7 @@
 
 /*
  * TRIGAS - TRI1 Entrega a Camion
- * Este archivo contendra unicamente la logica del flujo WH/TRI1/.
+ * Este archivo contendra unicamente la logica del flujo /TRI1/.
  * Fase C: primeros bloques TRI1 migrados sin cambiar comportamiento.
  */
 
@@ -16,9 +16,9 @@ window.TrigasBarcodeTri1 = window.TrigasBarcodeTri1 || {};
         const href = window.location.href || '';
         const hash = window.location.hash || '';
         return (
-            href.includes('WH/TRI1/') ||
-            hash.includes('WH/TRI1/') ||
-            text.includes('WH/TRI1/')
+            href.includes('/TRI1/') ||
+            hash.includes('/TRI1/') ||
+            text.includes('/TRI1/')
         );
     };
 

@@ -163,7 +163,6 @@ class StockPicking(models.Model):
         return bool(
             self.trigas_step == '3'
             or '/TRI3/' in name
-            or name.startswith('WH/TRI3/')
             or 'TRI3' in name
             or 'RECOGIDA' in origin
             or 'RECOGIDA' in note

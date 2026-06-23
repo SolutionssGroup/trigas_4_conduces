@@ -1443,3 +1443,95 @@ body.trigas-barcode-main-menu-screen-old-disabled .o_kanban_view {
     justify-content: flex-start !important;
     min-height: auto !important;
 }
+
+/* TRIGAS UI CLEANUP - dejar contador nativo, ocultar extras y agrandar producto */
+.o_barcode_client_action {
+
+    /* Ocultar botón Añadir Producto */
+    .o_add_line,
+    button.o_add_line {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Hacer que Validar ocupe todo el ancho */
+    .o_barcode_control.o_action_buttons,
+    .fixed-bottom .o_barcode_control {
+        button.o_validate_page,
+        button[class*="o_validate"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+    }
+
+    /* Ocultar contadores/listas personalizados */
+    .trigas-tri1-stable-selected-serials-zone,
+    .trigas-tri1-selected-serials-zone,
+    .trigas-tri1-selected-serials-card,
+    .trigas-tri1-selected-serials-header,
+    .trigas-tri1-selected-serials-body,
+    .trigas-tri2-session-serials,
+    .trigas-temp-serial-box,
+    .trigas-selected-serials-box,
+    .trigas-scanned-serials-box,
+    .trigas-pda-own-counter,
+    .trigas-temp-counter-override {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Agrandar referencia/nombre principal */
+    .o_barcode_line .o_barcode_product_ref,
+    .o_barcode_line .o_barcode_line_title {
+        font-size: 22px !important;
+        font-weight: 900 !important;
+        line-height: 1.2 !important;
+        color: #111827 !important;
+    }
+
+    /* Agrandar descripción del producto */
+    .o_barcode_line .product-label,
+    .o_barcode_line span.product-label {
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
+        color: #111827 !important;
+        display: block !important;
+        margin-top: 3px !important;
+    }
+
+    /* Agrandar contador nativo 0 / X Und. */
+    .o_barcode_line [name="quantity"],
+    .o_barcode_line .trigas_native_counter_big {
+        font-size: 22px !important;
+        font-weight: 900 !important;
+        line-height: 1.25 !important;
+        color: #111827 !important;
+    }
+}
+
+/* TRIGAS UI - Botón VALIDAR más grande */
+.o_barcode_client_action .fixed-bottom .o_validate_page,
+.o_barcode_client_action .fixed-bottom button.o_validate_page {
+    min-height: 64px !important;
+    height: 64px !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    padding: 14px 18px !important;
+    line-height: 1.2 !important;
+}
+
+.o_barcode_client_action .fixed-bottom {
+    min-height: 64px !important;
+}
+
+.o_barcode_client_action .fixed-bottom .btn {
+    font-size: 22px !important;
+}
