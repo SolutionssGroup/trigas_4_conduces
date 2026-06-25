@@ -3660,13 +3660,19 @@ function trigasTempSetValidateEnabled(enabled) {
 
     validateButton.classList.toggle('trigas-validate-disabled', !enabled);
     validateButton.classList.toggle('trigas-validate-enabled', enabled);
+
+    validateButton.style.pointerEvents = 'auto';
+    validateButton.removeAttribute('disabled');
+    validateButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
 }
 
 function trigasTempRefreshValidateState() {
     const serials = trigasTempGetSerials();
     const expectedQty = trigasTempGetExpectedQty();
     const complete = !!expectedQty && serials.length >= expectedQty;
-    const destinationRead = trigasTempIsDestinationRead();
+    const destinationRead = typeof trigasFinalDetectDestinationReadFromScreen === 'function'
+        ? trigasFinalDetectDestinationReadFromScreen()
+        : trigasTempIsDestinationRead();
 
     trigasTempSetValidateEnabled(complete && destinationRead);
 
@@ -3903,6 +3909,12 @@ async function trigasTempHandleFinalScan(scannedValue) {
             trigasTempSetDestinationName(destinationName);
             trigasTempShowPdaMessage(destinationValidation.message || 'Ubicación destino confirmada.', 'success');
             trigasTri1AddScanLog(scannedValue, 'location', 'Ubicación destino leída');
+            if (typeof trigasFinalRenderDestinationStatus === 'function') {
+                trigasFinalRenderDestinationStatus();
+            }
+            if (typeof trigasFinalRefreshState === 'function') {
+                trigasFinalRefreshState();
+            }
             window.trigasTempRenderSerialListSafe(false);
             return true;
         }
@@ -3952,6 +3964,10 @@ if (!window.__trigasFinalValidateBlockStarted) {
     window.__trigasFinalValidateBlockStarted = true;
 
     document.addEventListener('click', async (event) => {
+        if (window.__trigasAllowValidateAfterTempSave) {
+            return;
+        }
+
         /*
             TRI3 Recogida Cliente tiene su propio flujo:
             seriales abiertos + ubicación camión + firma + validación directa.
@@ -3980,10 +3996,6 @@ if (!window.__trigasFinalValidateBlockStarted) {
             return;
         }
 
-        if (window.__trigasAllowValidateAfterTempSave) {
-            return;
-        }
-
         if (!window.trigasTempCanValidateNow || !window.trigasTempCanValidateNow()) {
             event.preventDefault();
             event.stopPropagation();
@@ -3997,12 +4009,42 @@ if (!window.__trigasFinalValidateBlockStarted) {
                 return;
             }
 
-            if (!trigasTempIsDestinationRead()) {
+            const bodyText = document.body ? (document.body.innerText || '') : '';
+            const tri1DestinationAlreadyRead = (
+                (
+                    typeof trigasTempIsDestinationRead === 'function'
+                    && trigasTempIsDestinationRead()
+                )
+                || (
+                    document.body
+                    && (
+                        bodyText.includes('Ubicación leída:')
+                        || bodyText.includes('Ubicacion leida:')
+                        || bodyText.includes('Ubicación destino confirmada')
+                        || bodyText.includes('Ubicacion destino confirmada')
+                    )
+                    && !bodyText.includes('Pendiente leer ubicación destino')
+                )
+            );
+
+            if (!tri1DestinationAlreadyRead) {
                 trigasTempShowPdaMessage('Primero debe leer la ubicación destino del camión.', 'error');
                 return;
             }
 
-            trigasTempShowPdaMessage('No se puede validar todavía.', 'error');
+            window.__trigasAllowValidateAfterTempSave = true;
+            console.log('TRIGAS TRI1: listener viejo liberando validar nativo.');
+
+            setTimeout(function () {
+                try {
+                    button.click();
+                } finally {
+                    setTimeout(function () {
+                        window.__trigasAllowValidateAfterTempSave = false;
+                    }, 500);
+                }
+            }, 80);
+
             return;
         }
     }, true);
@@ -4145,17 +4187,43 @@ async function trigasFinalSyncTri1DestinationFromScreen() {
 }
 
 function trigasFinalDetectDestinationReadFromScreen() {
-    /*
-       IMPORTANTE:
-       Antes esta función intentaba detectar la ubicación leyendo texto de pantalla.
-       Eso provocaba falsos positivos: si Odoo mostraba un mensaje con una ubicación
-       incorrecta, se guardaba trigas_destination_read_<id> = 1.
+    if (typeof trigasTempIsDestinationRead === 'function' && trigasTempIsDestinationRead()) {
+        return true;
+    }
 
-       Regla nueva:
-       La ubicación solo puede quedar como leída cuando el backend responde ok === true.
-       Esta función solo consulta sessionStorage, no escribe nada.
-    */
-    return trigasTempIsDestinationRead();
+    const isReadText = function (text) {
+        const normalized = String(text || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+
+        if (normalized.includes('pendiente leer ubicacion destino')) {
+            return false;
+        }
+
+        return (
+            normalized.includes('ubicacion leida:') ||
+            normalized.includes('ubicacion destino confirmada')
+        );
+    };
+
+    const status = document.querySelector('.trigas-destination-status');
+    if (status) {
+        const statusText = status.innerText || status.textContent || '';
+        if (isReadText(statusText)) {
+            return true;
+        }
+        if (String(statusText || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .includes('pendiente leer ubicacion destino')) {
+            return false;
+        }
+    }
+
+    const bodyText = document.body ? (document.body.innerText || '') : '';
+    return isReadText(bodyText);
 }
 
 let trigasFinalTri1DestinationSyncRunning = false;
@@ -4202,7 +4270,9 @@ function trigasFinalSetValidateButtonState(enabled) {
     validateButton.classList.toggle('trigas-validate-disabled', !enabled);
     validateButton.classList.toggle('trigas-validate-enabled', enabled);
 
-    validateButton.style.pointerEvents = enabled ? 'auto' : 'auto';
+    validateButton.style.pointerEvents = 'auto';
+    validateButton.removeAttribute('disabled');
+    validateButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
 }
 
 function trigasFinalRefreshState() {
@@ -4415,6 +4485,12 @@ async function trigasFinalHandleScan(scannedValue) {
                 destinationName ? ('Ubicación leída: ' + destinationName) : 'Ubicación destino confirmada.',
                 'success'
             );
+            if (typeof trigasFinalRenderDestinationStatus === 'function') {
+                trigasFinalRenderDestinationStatus();
+            }
+            if (typeof trigasFinalRefreshState === 'function') {
+                trigasFinalRefreshState();
+            }
             window.trigasTempRenderSerialListSafe(false);
             trigasFinalRefreshState();
             return true;
@@ -4447,7 +4523,8 @@ async function trigasFinalHandleScan(scannedValue) {
 }
 
 window.trigasTempCanValidateNow = function () {
-    return trigasFinalRefreshState().canValidate;
+    const state = trigasTempRefreshValidateState();
+    return state.canValidate;
 };
 
 /* Reemplazar listener anterior sin duplicarlo */
@@ -5961,6 +6038,12 @@ window.trigasTempRenderSerialListSafe = function trigasTri1RenderSelectedSerialL
         }
         trigasTempRenderDestinationStatus();
         trigasTempRefreshValidateState();
+        if (typeof trigasFinalRenderDestinationStatus === 'function') {
+            trigasFinalRenderDestinationStatus();
+        }
+        if (typeof trigasFinalRefreshState === 'function') {
+            trigasFinalRefreshState();
+        }
         trigasTri1SyncSelectedSerialsFromBackend(false).then((syncedSerials) => {
             if (syncedSerials.length) {
                 window.trigasTempRenderSerialListSafe(false);
@@ -5972,6 +6055,12 @@ window.trigasTempRenderSerialListSafe = function trigasTri1RenderSelectedSerialL
     serialBox.style.display = 'block';
     trigasTempRenderDestinationStatus();
     trigasTempRefreshValidateState();
+    if (typeof trigasFinalRenderDestinationStatus === 'function') {
+        trigasFinalRenderDestinationStatus();
+    }
+    if (typeof trigasFinalRefreshState === 'function') {
+        trigasFinalRefreshState();
+    }
     trigasTri1ScheduleRenderSelectedSerialsDropdown(forceExpanded);
 };
 
@@ -6008,7 +6097,9 @@ trigasFinalRenderDestinationStatus = function () {
         productLine.appendChild(status);
     }
 
-    const destinationRead = trigasTempIsDestinationRead ? trigasTempIsDestinationRead() : false;
+    const destinationRead = typeof trigasFinalDetectDestinationReadFromScreen === 'function'
+        ? trigasFinalDetectDestinationReadFromScreen()
+        : (trigasTempIsDestinationRead ? trigasTempIsDestinationRead() : false);
 
     let info = {};
     try {
@@ -8235,6 +8326,14 @@ function trigasFixApplyValidateGreenState() {
 
         var txt = (btn.innerText || btn.textContent || '').trim().toLowerCase();
         if (!txt.includes('validar')) return;
+
+        if (
+            typeof window.trigasTempCanValidateNow === 'function'
+            && !window.trigasTempCanValidateNow()
+        ) {
+            console.log('TRIGAS TRI1: post-validate no inicia polling porque aún no puede validar.');
+            return;
+        }
 
         // No detenemos el click nativo. Solo esperamos confirmacion backend done.
         if (window.__trigasTri1PostValidateDonePolling) return;
