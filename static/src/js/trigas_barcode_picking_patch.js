@@ -9,6 +9,17 @@ import GroupedLineComponent from '@stock_barcode/components/grouped_line';
 import { patch } from '@web/core/utils/patch';
 import { _t } from '@web/core/l10n/translation';
 
+window.trigasRemovePostValidateTransition = window.trigasRemovePostValidateTransition || function () {
+    if (document.body) {
+        document.body.classList.remove('trigas-post-validate-transition');
+    }
+
+    const overlay = document.getElementById('trigas_post_validate_transition_overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+};
+
 /*
  * MAPA DE LIMPIEZA - NO CAMBIAR COMPORTAMIENTO
  *
@@ -3123,6 +3134,10 @@ if (!window.__trigasTempSerialFrontendStarted) {
             return;
         }
 
+        if (!(document.body.innerText || '').includes('/TRI1/')) {
+            return;
+        }
+
         const button = event.target.closest('button, a');
         if (!button) {
             return;
@@ -3445,6 +3460,10 @@ if (!window.__trigasKeyboardScannerCaptureStarted) {
             return;
         }
 
+        if (!(document.body.innerText || '').includes('/TRI1/')) {
+            return;
+        }
+
         if (!document.querySelector('.o_barcode_client_action')) {
             return;
         }
@@ -3726,11 +3745,35 @@ async function trigasTempValidateDestinationInBackend(scannedValue) {
         };
     }
 
-    return data.result || {
+    const result = data.result || {
         ok: false,
         is_location: false,
         message: 'No se pudo validar la ubicación.',
     };
+
+    if (result.ok && result.is_location) {
+        const destinationName = (
+            result.location_name ||
+            result.destination_name ||
+            result.location ||
+            scannedValue
+        );
+
+        if (typeof trigasTempSetDestinationRead === 'function') {
+            trigasTempSetDestinationRead(true);
+        }
+        if (typeof trigasTempSetDestinationName === 'function') {
+            trigasTempSetDestinationName(destinationName);
+        }
+        if (typeof trigasFinalRenderDestinationStatus === 'function') {
+            trigasFinalRenderDestinationStatus();
+        }
+        if (typeof trigasFinalRefreshState === 'function') {
+            trigasFinalRefreshState();
+        }
+    }
+
+    return result;
 }
 
 function trigasTempRenderDestinationStatus() {
@@ -3801,8 +3844,12 @@ window.trigasTempRenderSerialListSafe = function (forceExpanded = false) {
 
     if (!serials.length) {
         serialBox.style.display = 'none';
-        trigasTempRenderDestinationStatus();
-        trigasTempRefreshValidateState();
+        if (typeof trigasFinalRenderDestinationStatus === 'function') {
+            trigasFinalRenderDestinationStatus();
+        }
+        if (typeof trigasFinalRefreshState === 'function') {
+            trigasFinalRefreshState();
+        }
         return;
     }
 
@@ -3872,8 +3919,12 @@ window.trigasTempRenderSerialListSafe = function (forceExpanded = false) {
 
     serialBox.appendChild(list);
 
-    trigasTempRenderDestinationStatus();
-    trigasTempRefreshValidateState();
+    if (typeof trigasFinalRenderDestinationStatus === 'function') {
+        trigasFinalRenderDestinationStatus();
+    }
+    if (typeof trigasFinalRefreshState === 'function') {
+        trigasFinalRefreshState();
+    }
 
     console.log(
         'TRIGAS TEMP FINAL:',
@@ -3981,6 +4032,10 @@ if (!window.__trigasFinalValidateBlockStarted) {
         }
 
         if (!document.body || !document.body.classList.contains('trigas-barcode-operational-screen')) {
+            return;
+        }
+
+        if (!(document.body.innerText || '').includes('/TRI1/')) {
             return;
         }
 
@@ -4170,14 +4225,8 @@ async function trigasFinalSyncTri1DestinationFromScreen() {
     trigasTempSetDestinationRead(true);
     trigasTempSetDestinationName(destinationName);
 
-    if (typeof trigasTempRenderDestinationStatus === 'function') {
-        trigasTempRenderDestinationStatus();
-    }
     if (typeof trigasFinalRenderDestinationStatus === 'function') {
         trigasFinalRenderDestinationStatus();
-    }
-    if (typeof trigasTempRefreshValidateState === 'function') {
-        trigasTempRefreshValidateState();
     }
     if (typeof trigasFinalRefreshState === 'function') {
         trigasFinalRefreshState();
@@ -4191,39 +4240,43 @@ function trigasFinalDetectDestinationReadFromScreen() {
         return true;
     }
 
-    const isReadText = function (text) {
+    const normalizeText = function (text) {
+        return String(text || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+    };
+
+    const isReadText = function (text, requireTruckText) {
         const normalized = String(text || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase();
 
-        if (normalized.includes('pendiente leer ubicacion destino')) {
+        if (!normalized.includes('ubicacion leida') && !normalized.includes('ubicacion destino confirmada')) {
             return false;
         }
 
-        return (
-            normalized.includes('ubicacion leida:') ||
-            normalized.includes('ubicacion destino confirmada')
-        );
+        if (requireTruckText && !normalized.includes('camion')) {
+            return false;
+        }
+
+        return true;
     };
 
     const status = document.querySelector('.trigas-destination-status');
     if (status) {
         const statusText = status.innerText || status.textContent || '';
-        if (isReadText(statusText)) {
+        if (isReadText(statusText, false)) {
             return true;
         }
-        if (String(statusText || '')
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .includes('pendiente leer ubicacion destino')) {
+        if (normalizeText(statusText).includes('pendiente leer ubicacion destino')) {
             return false;
         }
     }
 
     const bodyText = document.body ? (document.body.innerText || '') : '';
-    return isReadText(bodyText);
+    return isReadText(bodyText, true);
 }
 
 let trigasFinalTri1DestinationSyncRunning = false;
@@ -4536,6 +4589,10 @@ if (!window.__trigasFinalScannerPatchStarted) {
             return;
         }
 
+        if (!(document.body.innerText || '').includes('/TRI1/')) {
+            return;
+        }
+
         if (!document.querySelector('.o_barcode_client_action')) {
             return;
         }
@@ -4584,6 +4641,7 @@ if (!window.__trigasFinalScannerPatchStarted) {
         if (
             document.body &&
             document.body.classList.contains('trigas-barcode-operational-screen') &&
+            (document.body.innerText || '').includes('/TRI1/') &&
             document.querySelector('.o_barcode_client_action')
         ) {
             trigasFinalRefreshState();
@@ -5940,7 +5998,9 @@ function trigasTri1RenderSelectedSerialsDropdown(productLine, serials, expectedQ
                     trigasTempSetDestinationName('');
                 }
                 window.trigasTempRenderSerialListSafe(true);
-                trigasTempRefreshValidateState();
+                if (typeof trigasFinalRefreshState === 'function') {
+                    trigasFinalRefreshState();
+                }
                 trigasTempShowPdaMessage('Serial eliminado: ' + serial, 'success');
             } catch (error) {
                 console.log('TRIGAS TRI1: error eliminando serial seleccionado', error);
@@ -5987,8 +6047,12 @@ async function trigasTri1RenderSelectedSerialsDropdownFromCurrentScreen(forceExp
     trigasTempUpdateCounter(serials.length);
     productLine.classList.toggle('trigas-temp-complete', !!expectedQty && serials.length >= expectedQty);
     const serialBox = trigasTri1RenderSelectedSerialsDropdown(productLine, serials, expectedQty, forceExpanded);
-    trigasTempRenderDestinationStatus();
-    trigasTempRefreshValidateState();
+    if (typeof trigasFinalRenderDestinationStatus === 'function') {
+        trigasFinalRenderDestinationStatus();
+    }
+    if (typeof trigasFinalRefreshState === 'function') {
+        trigasFinalRefreshState();
+    }
     return serialBox;
 }
 
@@ -6036,8 +6100,6 @@ window.trigasTempRenderSerialListSafe = function trigasTri1RenderSelectedSerialL
         if (typeof trigasTempSetDestinationName === 'function') {
             trigasTempSetDestinationName('');
         }
-        trigasTempRenderDestinationStatus();
-        trigasTempRefreshValidateState();
         if (typeof trigasFinalRenderDestinationStatus === 'function') {
             trigasFinalRenderDestinationStatus();
         }
@@ -6053,8 +6115,6 @@ window.trigasTempRenderSerialListSafe = function trigasTri1RenderSelectedSerialL
     }
 
     serialBox.style.display = 'block';
-    trigasTempRenderDestinationStatus();
-    trigasTempRefreshValidateState();
     if (typeof trigasFinalRenderDestinationStatus === 'function') {
         trigasFinalRenderDestinationStatus();
     }
@@ -6387,6 +6447,11 @@ function trigasFixApplyValidateGreenState() {
 
 /* TRIGAS FIX FINAL - Conduce 2 client location frontend state and sync */
 (function () {
+    function trigasC2GetPickingId() {
+        const match = String(window.location.hash || '').match(/active_id=(\d+)/);
+        return match ? Number(match[1]) : 0;
+    }
+
     function trigasC2GetPickingIdFromUrl() {
         const match = String(window.location.hash || '').match(/active_id=(\d+)/);
         return match ? match[1] : '';
@@ -6396,6 +6461,127 @@ function trigasFixApplyValidateGreenState() {
         const pickingId = trigasC2GetPickingIdFromUrl();
         return pickingId ? ('trigas_client_location_' + name + '_' + pickingId) : '';
     }
+
+    function trigasC2NormalizeText(text) {
+        return String(text || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
+    function trigasC2GetExpectedQty() {
+        const lines = [...document.querySelectorAll('.o_barcode_client_action .o_barcode_line')];
+
+        for (const line of lines) {
+            const text = line.innerText || line.textContent || '';
+            const matches = [...text.matchAll(/(?:^|[^\d])(\d+)\s*\/\s*(\d+)\s*(?:Und\.?|uds?\.?|u\.?)?(?=$|[^\d])/gi)];
+            for (const match of matches) {
+                const done = Number(match[1] || 0);
+                const expected = Number(match[2] || 0);
+                if (expected && done <= expected) {
+                    return expected;
+                }
+            }
+        }
+
+        if (window.TrigasBarcodeTri2 && typeof window.TrigasBarcodeTri2.getExpectedQty === 'function') {
+            return Number(window.TrigasBarcodeTri2.getExpectedQty() || 0);
+        }
+
+        return 0;
+    }
+
+    function trigasC2GetVisualCounter() {
+        const lines = [...document.querySelectorAll('.o_barcode_client_action .o_barcode_line')];
+
+        for (const line of lines) {
+            const text = line.innerText || line.textContent || '';
+            const matches = [...text.matchAll(/(?:^|[^\d])(\d+)\s*\/\s*(\d+)\s*(?:Und\.?|uds?\.?|u\.?)?(?=$|[^\d])/gi)];
+            for (const match of matches) {
+                const done = Number(match[1] || 0);
+                const expected = Number(match[2] || 0);
+                if (expected && done <= expected) {
+                    return { done, expected };
+                }
+            }
+        }
+
+        return { done: 0, expected: 0 };
+    }
+
+    function trigasC2GetSerials() {
+        if (window.TrigasBarcodeTri2 && typeof window.TrigasBarcodeTri2.getSessionSerials === 'function') {
+            return window.TrigasBarcodeTri2.getSessionSerials() || [];
+        }
+        if (typeof window.trigasTempGetSerials === 'function') {
+            return window.trigasTempGetSerials() || [];
+        }
+        return [];
+    }
+
+    function trigasC2HasCompleteSerials() {
+        const counter = trigasC2GetVisualCounter();
+        if (counter.expected) {
+            return counter.done >= counter.expected;
+        }
+
+        const expectedQty = trigasC2GetExpectedQty();
+        const serials = trigasC2GetSerials();
+        return !!expectedQty && serials.length >= expectedQty;
+    }
+
+    function trigasC2HasClientLocation() {
+        const readKey = trigasC2Key('read');
+        const nameKey = trigasC2Key('name');
+        if (readKey && window.sessionStorage.getItem(readKey) === '1') {
+            return true;
+        }
+
+        const status = document.querySelector('.trigas-destination-status');
+        const statusText = trigasC2NormalizeText(status ? (status.innerText || status.textContent || '') : '');
+        const name = nameKey ? trigasC2NormalizeText(window.sessionStorage.getItem(nameKey) || '') : '';
+
+        return (
+            (statusText.includes('ubicacion leida') && statusText.includes('clientes_trigas/')) ||
+            name.includes('clientes_trigas/')
+        );
+    }
+
+    function trigasC2HasSignature() {
+        const pickingId = trigasC2GetPickingId();
+        const text = trigasC2NormalizeText(document.body ? document.body.innerText || '' : '');
+
+        return (
+            Boolean(pickingId && window.sessionStorage.getItem('trigas_c2_signature_saved_' + pickingId) === '1') ||
+            text.includes('firma registrada correctamente') ||
+            text.includes('firma registrada') ||
+            text.includes('firmado')
+        );
+    }
+
+    window.trigasC2GetValidateState = function () {
+        const expectedQty = trigasC2GetExpectedQty();
+        const serials = trigasC2GetSerials();
+        const visualCounter = trigasC2GetVisualCounter();
+        const hasSerials = trigasC2HasCompleteSerials();
+        const hasLocation = trigasC2HasClientLocation();
+        const hasSignature = trigasC2HasSignature();
+
+        return {
+            expectedQty,
+            serials,
+            visualCounter,
+            hasSerials,
+            hasLocation,
+            hasSignature,
+            canValidate: hasSerials && hasLocation && hasSignature,
+        };
+    };
+
+    window.trigasC2CanValidateNow = function () {
+        return window.trigasC2GetValidateState().canValidate;
+    };
 
     function trigasC2FindValidateButton() {
         const root = document.querySelector('.o_barcode_client_action');
@@ -6614,6 +6800,44 @@ function trigasFixApplyValidateGreenState() {
                 return;
             }
 
+            if (
+                typeof window.trigasC2CanValidateNow === 'function' &&
+                !window.trigasC2CanValidateNow()
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                if (document.body) {
+                    document.body.classList.remove('trigas-post-validate-transition');
+                }
+                const transitionOverlay = document.getElementById('trigas_post_validate_transition_overlay');
+                if (transitionOverlay) {
+                    transitionOverlay.remove();
+                }
+
+                const state = typeof window.trigasC2GetValidateState === 'function'
+                    ? window.trigasC2GetValidateState()
+                    : {};
+
+                if (!state.hasSerials) {
+                    trigasC2ShowError('Debes escanear todos los seriales antes de validar.');
+                    return;
+                }
+
+                if (!state.hasSignature) {
+                    trigasC2ShowError('Debes registrar la firma del cliente antes de validar el Conduce 2.');
+                    return;
+                }
+
+                if (!state.hasLocation) {
+                    trigasC2ShowError('Debes escanear la ubicación correcta del cliente antes de validar.');
+                    return;
+                }
+
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
@@ -6729,8 +6953,13 @@ function trigasFixApplyValidateGreenState() {
     }
 
     function trigasC2SignHasCompleteSerials() {
+        if (typeof window.trigasC2GetValidateState === 'function') {
+            return !!window.trigasC2GetValidateState().hasSerials;
+        }
+
         const text = document.body ? document.body.innerText || '' : '';
-        return /Leídos:\s*3\s*\/\s*3/i.test(text) || /Leidos:\s*3\s*\/\s*3/i.test(text) || /3\s*\/\s*3/.test(text);
+        const match = text.match(/(?:Le[ií]dos\s*:\s*)?(\d+)\s*\/\s*(\d+)\s*(?:Und\.?)?/i);
+        return !!(match && Number(match[1]) >= Number(match[2]) && Number(match[2]));
     }
 
     function trigasC2SignHasClientLocation() {
@@ -6761,7 +6990,6 @@ function trigasFixApplyValidateGreenState() {
         return (
             trigasC2SignIsScreen() &&
             trigasC2SignHasCompleteSerials() &&
-            trigasC2SignHasClientLocation() &&
             !trigasC2SignAlreadySigned()
         );
     }
@@ -6996,11 +7224,6 @@ function trigasFixApplyValidateGreenState() {
             saveBtn.textContent = 'Guardando...';
 
             try {
-                await trigasC2SignCallBackend(
-                    'trigas_barcode_confirm_expected_customer_location_for_pda',
-                    [[pickingId]]
-                );
-
                 const signatureBase64 = canvas.toDataURL('image/png');
 
                 await trigasC2SignCallBackend(
@@ -7114,11 +7337,20 @@ function trigasFixApplyValidateGreenState() {
     }
 
     function trigasC2FlowHasCompleteSerials() {
+        if (typeof window.trigasC2GetValidateState === 'function') {
+            return !!window.trigasC2GetValidateState().hasSerials;
+        }
+
         const text = document.body ? document.body.innerText || '' : '';
-        return /Leídos:\s*3\s*\/\s*3/i.test(text) || /Leidos:\s*3\s*\/\s*3/i.test(text) || /3\s*\/\s*3/.test(text);
+        const match = text.match(/(?:Le[ií]dos\s*:\s*)?(\d+)\s*\/\s*(\d+)\s*(?:Und\.?)?/i);
+        return !!(match && Number(match[1]) >= Number(match[2]) && Number(match[2]));
     }
 
     function trigasC2FlowHasCorrectClientLocation() {
+        if (typeof window.trigasC2GetValidateState === 'function') {
+            return !!window.trigasC2GetValidateState().hasLocation;
+        }
+
         const status = document.querySelector('.trigas-destination-status');
         const statusText = status ? (status.innerText || status.textContent || '').trim() : '';
 
@@ -7129,6 +7361,10 @@ function trigasFixApplyValidateGreenState() {
     }
 
     function trigasC2FlowSignatureSaved() {
+        if (typeof window.trigasC2GetValidateState === 'function') {
+            return !!window.trigasC2GetValidateState().hasSignature;
+        }
+
         const pickingId = trigasC2FlowGetPickingId();
         const text = document.body ? document.body.innerText || '' : '';
 
@@ -7176,6 +7412,7 @@ function trigasFixApplyValidateGreenState() {
 
     function trigasC2FlowControlSignatureButton() {
         const buttonWrapper = document.getElementById('trigas_c2_signature_button_wrapper_final');
+        const legacyButtonWrapper = document.getElementById('trigas_barcode_signature_button_wrapper');
 
         if (!trigasC2FlowIsScreen()) {
             if (buttonWrapper) {
@@ -7184,9 +7421,12 @@ function trigasFixApplyValidateGreenState() {
             return;
         }
 
+        if (legacyButtonWrapper) {
+            legacyButtonWrapper.remove();
+        }
+
         const allowSignatureButton = (
             trigasC2FlowHasCompleteSerials() &&
-            trigasC2FlowHasCorrectClientLocation() &&
             !trigasC2FlowSignatureSaved()
         );
 
@@ -7281,9 +7521,16 @@ function trigasFixApplyValidateGreenState() {
             return;
         }
 
-        const hasSerials = trigasC2FlowHasCompleteSerials();
-        const hasLocation = trigasC2FlowHasCorrectClientLocation();
-        const hasSignature = trigasC2FlowSignatureSaved();
+        const state = typeof window.trigasC2GetValidateState === 'function'
+            ? window.trigasC2GetValidateState()
+            : {
+                hasSerials: trigasC2FlowHasCompleteSerials(),
+                hasLocation: trigasC2FlowHasCorrectClientLocation(),
+                hasSignature: trigasC2FlowSignatureSaved(),
+            };
+        const hasSerials = state.hasSerials;
+        const hasLocation = state.hasLocation;
+        const hasSignature = state.hasSignature;
 
         const canValidate = hasSerials && hasLocation && hasSignature;
 
@@ -7322,7 +7569,15 @@ function trigasFixApplyValidateGreenState() {
                     return;
                 }
 
-                if (trigasC2FlowHasCompleteSerials() && trigasC2FlowHasCorrectClientLocation() && trigasC2FlowSignatureSaved()) {
+                const currentState = typeof window.trigasC2GetValidateState === 'function'
+                    ? window.trigasC2GetValidateState()
+                    : {
+                        hasSerials: trigasC2FlowHasCompleteSerials(),
+                        hasLocation: trigasC2FlowHasCorrectClientLocation(),
+                        hasSignature: trigasC2FlowSignatureSaved(),
+                    };
+
+                if (currentState.hasSerials && currentState.hasLocation && currentState.hasSignature) {
                     return;
                 }
 
@@ -7330,17 +7585,25 @@ function trigasFixApplyValidateGreenState() {
                 event.stopPropagation();
                 event.stopImmediatePropagation();
 
-                if (!trigasC2FlowHasCompleteSerials()) {
+                if (document.body) {
+                    document.body.classList.remove('trigas-post-validate-transition');
+                }
+                const transitionOverlay = document.getElementById('trigas_post_validate_transition_overlay');
+                if (transitionOverlay) {
+                    transitionOverlay.remove();
+                }
+
+                if (!currentState.hasSerials) {
                     trigasC2FlowShowMessage('Debes escanear todos los seriales antes de validar.');
                     return;
                 }
 
-                if (!trigasC2FlowHasCorrectClientLocation()) {
-                    trigasC2FlowShowMessage('Debes escanear la ubicación correcta del cliente antes de validar.');
+                if (!currentState.hasSignature) {
+                    trigasC2FlowShowMessage('Debes registrar la firma del cliente antes de validar el Conduce 2.');
                     return;
                 }
 
-                trigasC2FlowShowMessage('Debes registrar la firma del cliente antes de validar el Conduce 2.');
+                trigasC2FlowShowMessage('Debes escanear la ubicación correcta del cliente antes de validar.');
             };
 
             btn.addEventListener('click', btn.__trigasC2BlockedClick, true);
@@ -8564,13 +8827,8 @@ function trigasFixApplyValidateGreenState() {
     }
 
     function trigasRemovePostValidateTransition() {
-        if (document.body) {
-            document.body.classList.remove('trigas-post-validate-transition');
-        }
-
-        const overlay = document.getElementById('trigas_post_validate_transition_overlay');
-        if (overlay) {
-            overlay.remove();
+        if (typeof window.trigasRemovePostValidateTransition === 'function') {
+            window.trigasRemovePostValidateTransition();
         }
     }
 
@@ -8698,12 +8956,32 @@ function trigasFixApplyValidateGreenState() {
         // TRI1 y TRI2 también deben retornar a Operaciones después de validar.
         const isTri3Screen = screenText.includes('/TRI3/');
         const isInternalScreen = screenText.includes('WH/INT/');
+        const isTri1Screen = screenText.includes('/TRI1/');
+        const isTri2Screen = screenText.includes('/TRI2/');
 
         const btn = event.target && event.target.closest
             ? event.target.closest('button, a, .btn')
             : null;
 
         if (!trigasIsValidateButton(btn)) return;
+
+        if (
+            isTri1Screen &&
+            typeof window.trigasTempCanValidateNow === 'function' &&
+            !window.trigasTempCanValidateNow()
+        ) {
+            trigasRemovePostValidateTransition();
+            return;
+        }
+
+        if (
+            isTri2Screen &&
+            typeof window.trigasC2CanValidateNow === 'function' &&
+            !window.trigasC2CanValidateNow()
+        ) {
+            trigasRemovePostValidateTransition();
+            return;
+        }
 
         console.log('TRIGAS GLOBAL: validar detectado, programando retorno a Operaciones.');
 

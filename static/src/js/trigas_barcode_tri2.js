@@ -138,13 +138,22 @@ function tri2GetExpectedQtyFromScreen() {
         return 0;
     }
 
-    const text = root.innerText || '';
+    const productLines = [...root.querySelectorAll('.o_barcode_line')];
+    for (const line of productLines) {
+        const lineText = line.innerText || line.textContent || '';
+        const visualCounter = lineText.match(/(?:^|[^\d])(\d+)\s*\/\s*(\d+)\s*(?:Und\.?|uds?\.?|u\.?)?(?=$|[^\d])/i);
+        if (visualCounter && visualCounter[2]) {
+            return Number(visualCounter[2]);
+        }
+    }
+
+    const text = productLines.map((line) => line.innerText || line.textContent || '').join('\n');
     const labelled = text.match(/(?:Le[ií]dos|Seriales le[ií]dos)\s*:\s*\d+\s*\/\s*(\d+)/i);
     if (labelled && labelled[1]) {
         return Number(labelled[1]);
     }
 
-    const generic = text.match(/(\d+)\s*\/\s*(\d+)/);
+    const generic = text.match(/(?:^|[^\d])(\d+)\s*\/\s*(\d+)\s*(?:Und\.?|uds?\.?|u\.?)?(?=$|[^\d])/i);
     if (generic && generic[2]) {
         return Number(generic[2]);
     }
@@ -288,6 +297,7 @@ function tri2RenderSessionSerials(options = {}) {
 
 function tri2CanAcceptSerial(serialName, expectedQty) {
     const serials = tri2GetSessionSerials();
+    const qty = Number(expectedQty || tri2GetExpectedQtyFromScreen() || 0);
 
     if (serials.includes(serialName)) {
         return {
@@ -296,28 +306,42 @@ function tri2CanAcceptSerial(serialName, expectedQty) {
         };
     }
 
-    // No bloquear por expectedQty en frontend.
-    // El backend valida la cantidad real esperada del picking.
-    console.log('TRIGAS TRI2: límite frontend expectedQty ignorado; backend validará', expectedQty, serials.length);
+    if (qty > 0 && serials.length >= qty) {
+        console.log('TRIGAS TRI2: serial extra bloqueado por cantidad completa', {
+            expectedQty: qty,
+            readQty: serials.length,
+            serialName: serialName,
+        });
+
+        return {
+            ok: false,
+            message: 'Ya se leyó la cantidad completa esperada.',
+        };
+    }
 
     return { ok: true };
 }
 
 function tri2RecordSerial(serialName, options = {}) {
-    serialName = String(serialName || '').trim();
     if (!serialName) {
-        return [];
+        return tri2GetSessionSerials();
     }
 
     const expectedQty = options.expectedQty || tri2GetExpectedQtyFromScreen();
     const serials = tri2GetSessionSerials();
-    if (!serials.includes(serialName)) {
-        serials.push(serialName);
+    const check = tri2CanAcceptSerial(serialName, expectedQty);
+
+    if (!check.ok) {
+        tri2RenderSessionSerials({ expectedQty, forceExpanded: !!options.forceExpanded });
+        return serials;
     }
+
+    serials.push(serialName);
     tri2SetSessionSerials(serials);
     tri2RenderSessionSerials({ expectedQty, forceExpanded: !!options.forceExpanded });
     return serials;
 }
+
 
 window.TrigasBarcodeTri2 = {
     isScreen: tri2IsScreen,
