@@ -576,106 +576,11 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
 
       _trigasScheduleTri3TruckDestinationBadge() {
-          if (this.__trigasTri3TruckDestinationBadgeTimer) {
-              clearTimeout(this.__trigasTri3TruckDestinationBadgeTimer);
-          }
-
-          this.__trigasTri3TruckDestinationBadgeTimer = setTimeout(() => {
-              this._trigasRenderTri3TruckDestinationBadge();
-          }, 250);
-
-          setTimeout(() => {
-              this._trigasRenderTri3TruckDestinationBadge();
-          }, 900);
+          return window.TrigasBarcodeTri3.scheduleTruckDestinationBadge(this);
       },
 
       async _trigasRenderTri3TruckDestinationBadge(forcedLocationName) {
-          const root = document.querySelector('.o_barcode_client_action');
-          if (!root) {
-              return;
-          }
-
-          const existing = root.querySelector('.trigas-tri3-truck-destination-badge');
-
-          if (!this._trigasIsTri3NativeScreen || !this._trigasIsTri3NativeScreen()) {
-              if (existing) {
-                  existing.remove();
-              }
-              return;
-          }
-
-          let locationName = forcedLocationName || this.__trigasTri3TruckDestinationName || '';
-
-          if (!locationName) {
-              const pickingId = this._trigasGetCurrentPickingIdForPda();
-              if (pickingId) {
-                  try {
-                      const state = await this.orm.call(
-                          'stock.picking',
-                          'trigas_barcode_get_step_3_state',
-                          [[pickingId]]
-                      );
-
-                      if (state && state.has_truck && state.truck_location_name) {
-                          locationName = state.truck_location_name;
-                          this.__trigasTri3TruckDestinationName = locationName;
-                      }
-                  } catch (error) {
-                      console.log('TRIGAS: no se pudo consultar destino TRI3', error);
-                  }
-              }
-          }
-
-          if (!locationName) {
-              if (existing) {
-                  existing.remove();
-              }
-              return;
-          }
-
-          const safeLocationName = String(locationName)
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#039;');
-
-          let box = existing;
-          if (!box) {
-              box = document.createElement('div');
-              box.className = 'trigas-tri3-truck-destination-badge';
-
-              const reference =
-                  root.querySelector('.o_barcode_lines') ||
-                  root.querySelector('.o_barcode_line');
-
-              if (reference && reference.parentNode) {
-                  reference.parentNode.insertBefore(box, reference);
-              } else {
-                  root.insertBefore(box, root.firstChild);
-              }
-          }
-
-          box.innerHTML = `
-              <div style="font-weight:700;font-size:13px;margin-bottom:2px;">
-                  ✅ Destino camión leído
-              </div>
-              <div style="font-size:14px;font-weight:600;">
-                  ${safeLocationName}
-              </div>
-          `;
-
-          box.style.margin = '8px 10px';
-          box.style.padding = '10px 12px';
-          box.style.background = '#eaf7ee';
-          box.style.border = '1px solid #b7e2c1';
-          box.style.borderLeft = '5px solid #28a745';
-          box.style.borderRadius = '6px';
-          box.style.color = '#1f5130';
-          box.style.boxShadow = '0 1px 4px rgba(0,0,0,0.12)';
-          box.style.position = 'sticky';
-          box.style.top = '0';
-          box.style.zIndex = '20';
+          return window.TrigasBarcodeTri3.renderTruckDestinationBadge(this, forcedLocationName);
       },
 
     _trigasMarkLastScannedLineVisual() {
@@ -1451,168 +1356,19 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
     },
 
     async _trigasProcessTri3AnyOriginSerial(barcodeData) {
-        const serialName = (
-            barcodeData &&
-            barcodeData.lot &&
-            (
-                barcodeData.lot.name ||
-                barcodeData.lot.display_name ||
-                barcodeData.lot.barcode
-            )
-        );
-
-        if (!serialName) {
-            return false;
-        }
-
-        try {
-            const result = await this.orm.call(
-                'stock.picking',
-                'trigas_tri3_add_serial_from_any_origin',
-                [[this.params.id], serialName]
-            );
-
-            if (!result || !result.ok) {
-                this.notification.add(
-                    result && result.message ? result.message : _t('No se pudo agregar el serial.'),
-                    { type: 'danger' }
-                );
-                return false;
-            }
-
-            // PDA: no mostrar toast verde por serial leído.
-            // La confirmación visual queda en la línea/lista de la pantalla.
-
-              // Importante PDA:
-              // No usamos window.location.reload().
-              // Solo pedimos al modelo Barcode que refresque su estado interno
-              // y dejamos que Odoo pinte las líneas nativas.
-              try {
-                  await this._trigasReloadPickingState();
-              } catch (e) {
-                  // Si no aplica, usamos eventos nativos del modelo.
-              }
-
-              this.trigger('refresh');
-              this.trigger('update');
-              this._trigasAfterBarcodeUiUpdate();
-
-              return false;
-
-        } catch (error) {
-            this.notification.add(
-                trigasGetErrorMessageSafe(
-                    error,
-                    _t('No se pudo agregar el serial desde su ubicación real.')
-                ),
-                { type: 'danger' }
-            );
-            return false;
-        }
+        return window.TrigasBarcodeTri3.processAnyOriginSerial(this, barcodeData);
     },
 
 
 
 
     async _trigasTryProcessTri3TruckDestinationFromBarcode(barcode, parsedBarcodeData) {
-        if (!this._trigasIsTri3NativeScreen || !this._trigasIsTri3NativeScreen()) {
-            return false;
-        }
-
-        const scannedLocation = trigasGetScannedLocationSafe(parsedBarcodeData);
-
-        if (scannedLocation) {
-            return await this._trigasProcessTri3TruckDestination(parsedBarcodeData);
-        }
-
-        const rawCode = String(barcode || '').trim();
-
-        if (!rawCode) {
-            return false;
-        }
-
-        // Solo intentamos con códigos que parecen ubicaciones de camión conocidas.
-        // Esto evita interferir con seriales CILI-*.
-        if (/^CILI[-_ ]?\d+/i.test(rawCode)) {
-            return false;
-        }
-
-        const lower = rawCode.toLowerCase();
-
-        if (
-            lower.startsWith('cam') ||
-            lower.includes('camion') ||
-            lower.includes('camión') ||
-            lower.includes('wh/stock/camion') ||
-            lower.includes('wh/stock/camión')
-        ) {
-            return await this._trigasProcessTri3TruckDestination(rawCode);
-        }
-
-        return false;
+        return window.TrigasBarcodeTri3.tryProcessTruckDestinationFromBarcode(this, barcode, parsedBarcodeData);
     },
 
 
     async _trigasProcessTri3TruckDestination(barcodeData) {
-        const scannedLocation = trigasGetScannedLocationSafe(barcodeData);
-
-        const locationCode = (
-            (typeof barcodeData === 'string' && barcodeData) ||
-            (scannedLocation && (
-                scannedLocation.barcode ||
-                scannedLocation.name ||
-                scannedLocation.display_name ||
-                scannedLocation.complete_name
-            ))
-        );
-
-        if (!locationCode) {
-            return false;
-        }
-
-        try {
-            const result = await this.orm.call(
-                'stock.picking',
-                'trigas_tri3_set_truck_destination_from_barcode',
-                [[this.params.id], locationCode]
-            );
-
-            if (!result || !result.ok) {
-                this.notification.add(
-                    result && result.message ? result.message : _t('No se pudo registrar la ubicación destino.'),
-                    { type: 'danger' }
-                );
-                return true;
-            }
-
-            // TRI3/PDA: no mostrar toast verde de ubicación destino.
-            // El comprobante visual fijo queda en pantalla.
-
-            // PDA: no recargar la página completa.
-            // Solo refrescar estado interno para que Odoo pinte nativo.
-            try {
-                await this._trigasReloadPickingState();
-            } catch (e) {}
-
-              this.__trigasTri3TruckDestinationName = result.location_name || result.locationName || '';
-              this._trigasRenderTri3TruckDestinationBadge(this.__trigasTri3TruckDestinationName);
-
-            this.trigger('refresh');
-            this.trigger('update');
-            this._trigasAfterBarcodeUiUpdate();
-
-            return true;
-
-        } catch (error) {
-            this.notification.add(
-                trigasGetErrorMessageSafe(
-                    error,
-                    _t('No se pudo registrar el camión destino.')
-                ),
-                { type: 'danger' }
-            );
-            return true;
-        }
+        return window.TrigasBarcodeTri3.processTruckDestination(this, barcodeData);
     },
 
 
@@ -6825,13 +6581,13 @@ function trigasFixApplyValidateGreenState() {
                     return;
                 }
 
-                if (!state.hasSignature) {
-                    trigasC2ShowError('Debes registrar la firma del cliente antes de validar el Conduce 2.');
+                if (!state.hasLocation) {
+                    trigasC2ShowError('Debes escanear la ubicación correcta del cliente antes de validar.');
                     return;
                 }
 
-                if (!state.hasLocation) {
-                    trigasC2ShowError('Debes escanear la ubicación correcta del cliente antes de validar.');
+                if (!state.hasSignature) {
+                    trigasC2ShowError('Debes registrar la firma del cliente antes de validar el Conduce 2.');
                     return;
                 }
 
@@ -6968,7 +6724,13 @@ function trigasFixApplyValidateGreenState() {
            No basta con que CLIENTES_TRIGAS aparezca en cualquier parte.
            Solo permitimos firmar cuando el bloque fijo indique que la ubicación
            cliente fue leída correctamente.
+
+           Priorizamos el estado confiable (trigasC2GetValidateState) sobre el
+           texto visual del DOM, que puede quedar desactualizado tras escanear.
         */
+        if (typeof window.trigasC2GetValidateState === 'function') {
+            return !!window.trigasC2GetValidateState().hasLocation;
+        }
         const status = document.querySelector('.trigas-destination-status');
         const statusText = status ? (status.innerText || status.textContent || '').trim() : '';
 
@@ -6990,6 +6752,7 @@ function trigasFixApplyValidateGreenState() {
         return (
             trigasC2SignIsScreen() &&
             trigasC2SignHasCompleteSerials() &&
+            trigasC2SignHasClientLocation() &&
             !trigasC2SignAlreadySigned()
         );
     }
@@ -7070,6 +6833,10 @@ function trigasFixApplyValidateGreenState() {
 
         if (!pickingId) {
             trigasC2SignShowMessage('No se pudo identificar el conduce actual.', 'error');
+            return;
+        }
+        if (!trigasC2SignHasClientLocation()) {
+            trigasC2SignShowMessage('Debes escanear la ubicación del cliente antes de firmar.', 'error');
             return;
         }
 
@@ -7238,9 +7005,8 @@ function trigasFixApplyValidateGreenState() {
                 trigasC2SignShowMessage('Firma registrada correctamente.', 'success');
 
             } catch (error) {
+                wrapper.remove();
                 trigasC2SignShowMessage(error.message || 'No se pudo guardar la firma.', 'error');
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Guardar firma';
             }
         };
 
@@ -7598,12 +7364,12 @@ function trigasFixApplyValidateGreenState() {
                     return;
                 }
 
-                if (!currentState.hasSignature) {
-                    trigasC2FlowShowMessage('Debes registrar la firma del cliente antes de validar el Conduce 2.');
+                if (!currentState.hasLocation) {
+                    trigasC2FlowShowMessage('Debes escanear la ubicación correcta del cliente antes de validar.');
                     return;
                 }
 
-                trigasC2FlowShowMessage('Debes escanear la ubicación correcta del cliente antes de validar.');
+                trigasC2FlowShowMessage('Debes registrar la firma del cliente antes de validar el Conduce 2.');
             };
 
             btn.addEventListener('click', btn.__trigasC2BlockedClick, true);
@@ -8742,7 +8508,7 @@ function trigasFixApplyValidateGreenState() {
         const hasBarcodeAction = !!document.querySelector('.o_barcode_client_action');
 
         return hasBarcodeAction && (
-            text.includes('WH/INT/') ||
+            text.includes('/INT/') ||
             text.includes('/TRI1/') ||
             text.includes('/TRI2/') ||
             text.includes('/TRI3/')
@@ -8902,7 +8668,7 @@ function trigasFixApplyValidateGreenState() {
             const hasBarcodeAction = !!document.querySelector('.o_barcode_client_action');
 
             return hasBarcodeAction && (
-                text.includes('WH/INT/') ||
+                text.includes('/INT/') ||
                 text.includes('/TRI1/') ||
                 text.includes('/TRI2/') ||
                 text.includes('/TRI3/')
@@ -8955,7 +8721,7 @@ function trigasFixApplyValidateGreenState() {
         const screenText = document.body ? (document.body.innerText || '') : '';
         // TRI1 y TRI2 también deben retornar a Operaciones después de validar.
         const isTri3Screen = screenText.includes('/TRI3/');
-        const isInternalScreen = screenText.includes('WH/INT/');
+        const isInternalScreen = screenText.includes('/INT/');
         const isTri1Screen = screenText.includes('/TRI1/');
         const isTri2Screen = screenText.includes('/TRI2/');
 
@@ -8964,15 +8730,6 @@ function trigasFixApplyValidateGreenState() {
             : null;
 
         if (!trigasIsValidateButton(btn)) return;
-
-        if (
-            isTri1Screen &&
-            typeof window.trigasTempCanValidateNow === 'function' &&
-            !window.trigasTempCanValidateNow()
-        ) {
-            trigasRemovePostValidateTransition();
-            return;
-        }
 
         if (
             isTri2Screen &&
@@ -8986,10 +8743,13 @@ function trigasFixApplyValidateGreenState() {
         console.log('TRIGAS GLOBAL: validar detectado, programando retorno a Operaciones.');
 
         // No detenemos el click. Dejamos que Odoo valide normalmente.
-        if (isTri3Screen || isInternalScreen) {
+        // TRI1, TRI3 e Internas usan el mecanismo robusto: esperar confirmacion
+        // real del backend (estado 'done') antes de redirigir, en vez de un
+        // guard fragil del lado cliente que puede fallar por condicion de carrera.
+        if (isTri1Screen || isTri3Screen || isInternalScreen) {
             const match = String(window.location.hash || '').match(/active_id=(\d+)/);
             const pickingId = match ? match[1] : '';
-            const label = isTri3Screen ? 'TRIGAS TRI3' : 'TRIGAS INTERNA';
+            const label = isTri1Screen ? 'TRIGAS TRI1' : (isTri3Screen ? 'TRIGAS TRI3' : 'TRIGAS INTERNA');
             trigasGoToOperationsListWhenPickingDone(pickingId, label);
             return;
         }
@@ -9127,7 +8887,7 @@ function trigasFixApplyValidateGreenState() {
         const text = (document.body.innerText || '').toUpperCase();
         const hasBarcode = !!document.querySelector('.o_barcode_client_action');
 
-        return hasBarcode && text.includes('WH/INT/');
+        return hasBarcode && text.includes('/INT/');
     }
 
     function getInternalTransferPickingId() {
@@ -9299,7 +9059,7 @@ function trigasFixApplyValidateGreenState() {
         const text = (document.body.innerText || '').toUpperCase();
         const hasBarcode = !!document.querySelector('.o_barcode_client_action');
 
-        return hasBarcode && text.includes('WH/INT/');
+        return hasBarcode && text.includes('/INT/');
     }
 
     function removeCancelButton() {

@@ -702,10 +702,6 @@ class StockPicking(models.Model):
         if not self._trigas_barcode_is_truck_step():
             return True
 
-        allowed_moves = self.move_ids_without_package.filtered(
-            lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce
-        )
-
         positive_quants = self.env['stock.quant'].search([
             ('lot_id', '=', lot.id),
             ('product_id', '=', lot.product_id.id),
@@ -717,23 +713,55 @@ class StockPicking(models.Model):
             raise UserError(_('Este serial no tiene existencia disponible en almacén.'))
 
         if len(positive_locations) > 1:
-            raise UserError(_('Este serial tiene existencia en más de una ubicación. Debe corregirse antes de cargarlo.'))
+            if not self.location_id:
+                raise UserError(_('Este picking no tiene ubicación de origen definida.'))
+
+            self.env['stock.quant']._trigas_force_correct_serial_location(
+                lot.product_id, lot, self.location_id
+            )
+
+            positive_quants = self.env['stock.quant'].search([
+                ('lot_id', '=', lot.id),
+                ('product_id', '=', lot.product_id.id),
+                ('quantity', '>', 0),
+            ])
+            positive_locations = positive_quants.mapped('location_id')
 
         current_location = positive_locations[0]
-        if current_location.usage == 'customer' or (current_location.complete_name or '').startswith('CLIENTES_TRIGAS/'):
-            raise UserError(_(
-                'Este serial no está disponible para cargar al camión. Ubicación actual: %s.'
-            ) % current_location.display_name)
 
-        source_locations = (self.location_id | allowed_moves.mapped('location_id')).filtered(lambda location: location)
-        valid_source_locations = self.env['stock.location'].search([
-            ('id', 'child_of', source_locations.ids),
-        ]) if source_locations else self.env['stock.location']
+        # Ademas de duplicados POSITIVOS (ya cubiertos arriba), buscar
+        # cualquier resto con cantidad distinta de cero en OTRA ubicacion
+        # (ej. restos negativos huerfanos), que nunca se detectan solo
+        # buscando quantity > 0, y forzar la correccion tambien en ese caso.
+        # Excluimos ubicaciones virtuales (ej. ajustes de inventario): son
+        # contrapartidas contables normales y forzar su correccion duplicaria
+        # la cantidad real del serial en su ubicacion correcta.
+        all_nonzero_quants = self.env['stock.quant'].sudo().search([
+            ('lot_id', '=', lot.id),
+            ('product_id', '=', lot.product_id.id),
+            ('quantity', '!=', 0),
+            ('location_id.usage', 'in', ['internal', 'customer', 'transit']),
+        ])
+        stray_elsewhere = all_nonzero_quants.filtered(
+            lambda q: q.location_id.id != current_location.id
+        )
+        if stray_elsewhere:
+            self.env['stock.quant']._trigas_force_correct_serial_location(
+                lot.product_id, lot, current_location
+            )
 
-        if current_location not in valid_source_locations:
-            raise UserError(_(
-                'Este serial no está disponible para cargar al camión. Ubicación actual: %s.'
-            ) % current_location.display_name)
+        # REGLA TRIGAS: el escaneo físico siempre gana sobre el dato del
+        # sistema. Si el serial figura en una ubicación distinta a la
+        # esperada por este picking (incluyendo ubicaciones de cliente),
+        # no se bloquea: se fuerza la corrección hacia self.location_id y
+        # se continúa.
+        if not self.location_id:
+            raise UserError(_('Este picking no tiene ubicación de origen definida.'))
+
+        if current_location.id != self.location_id.id:
+            self.env['stock.quant']._trigas_force_correct_serial_location(
+                lot.product_id, lot, self.location_id
+            )
 
         return True
 
@@ -2296,8 +2324,16 @@ class StockPicking(models.Model):
                 'message': _('El serial %s no tiene existencia disponible.') % serial_name,
             }
 
+        # Priorizar ubicaciones reconocidas como de Trigas sobre cualquier
+        # otra, para evitar que un quant mas reciente de otro modulo (ej.
+        # Rental) se elija por error como la ubicacion "correcta".
+        trigas_quants = quants.filtered(
+            lambda q: (q.location_id.complete_name or '').startswith(('TRIGA/', 'CLIENTES_TRIGAS/'))
+        )
+        candidate_quants = trigas_quants or quants
+
         # Ubicación real actual del serial.
-        quant = quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
+        quant = candidate_quants.sorted(lambda q: q.in_date or q.create_date, reverse=True)[:1]
         source_location = quant.location_id
         destination_location = self.location_dest_id or self.picking_type_id.default_location_dest_id
 
@@ -2306,6 +2342,11 @@ class StockPicking(models.Model):
                 'ok': False,
                 'message': _('Esta recogida no tiene ubicación destino definida.'),
             }
+
+        if len(quants) > 1:
+            self.env['stock.quant']._trigas_force_correct_serial_location(
+                lot.product_id, lot, source_location
+            )
 
         # Si el picking está vacío, ajustamos el encabezado al primer origen real.
         # Las líneas posteriores pueden tener otros orígenes.
