@@ -6065,7 +6065,7 @@ function trigasIsNativeOdooBarcodeScreenSafe() {
 
     return (
         bodyText.includes('wh/tri3/') ||
-        bodyText.includes('wh/int/') ||
+        bodyText.includes('/int/') ||
         href.includes('tri3') ||
         hash.includes('tri3') ||
         bodyText.includes('recogida de cilindros') ||
@@ -7215,7 +7215,7 @@ function trigasFixApplyValidateGreenState() {
 
         const isNativeTri3OrInternal = (
             bodyText.includes('wh/tri3/') ||
-            bodyText.includes('wh/int/') ||
+            bodyText.includes('/int/') ||
             bodyText.includes('recogida de cilindros') ||
             bodyText.includes('transferencia interna') ||
             bodyText.includes('transferencias internas')
@@ -8028,7 +8028,7 @@ function trigasFixApplyValidateGreenState() {
             text.includes('wh/tri1/') ||
             text.includes('wh/tri2/') ||
             text.includes('wh/tri3/') ||
-            text.includes('wh/int/') ||
+            text.includes('/int/') ||
             text.includes('escanear producto') ||
             text.includes('validar')
         );
@@ -9002,7 +9002,7 @@ function trigasFixApplyValidateGreenState() {
         return !document.querySelector('.o_barcode_client_action') &&
             !!document.querySelector('.o_kanban_view') &&
             text.includes('transferencias internas') &&
-            text.includes('wh/int/');
+            text.includes('/int/');
     }
 
     function sync() {
@@ -9241,7 +9241,7 @@ function trigasFixApplyValidateGreenState() {
             text.includes('wh/tri1/') ||
             text.includes('wh/tri2/') ||
             text.includes('wh/tri3/') ||
-            text.includes('wh/int/')
+            text.includes('/int/')
         );
     }
 
