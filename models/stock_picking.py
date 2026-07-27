@@ -1,4 +1,4 @@
-from odoo import api, fields, models, _
+﻿from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 
 
@@ -1371,11 +1371,15 @@ class StockPicking(models.Model):
     def _trigas_prepare_native_internal_transfer_before_validate(self):
         self.ensure_one()
 
-        done_serial_lines = self.move_line_ids.filtered(
-            lambda ml: ml.lot_id and ml.qty_done > 0
+        lines_needing_serial = self.move_line_ids.filtered(
+            lambda ml: ml.product_id.tracking == 'serial'
         )
-        if not done_serial_lines:
-            raise UserError(_('Debes escanear uno o más seriales antes de validar la transferencia.'))
+        if lines_needing_serial:
+            done_serial_lines = lines_needing_serial.filtered(
+                lambda ml: ml.lot_id and ml.qty_done > 0
+            )
+            if not done_serial_lines:
+                raise UserError(_('Debes escanear uno o más seriales antes de validar la transferencia.'))
 
         source_location = self._trigas_get_native_source_location_reference()
         if not source_location:
