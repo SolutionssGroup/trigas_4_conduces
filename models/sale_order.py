@@ -100,23 +100,31 @@ class SaleOrder(models.Model):
 
     def action_cancel(self):
         conduces_to_cancel = self.env['stock.picking']
+        orders_to_reset = self.env['sale.order']
 
         for order in self:
-            conduces_to_cancel |= order._trigas_get_related_conduces().filtered(
+            related = order._trigas_get_related_conduces()
+            conduces_to_cancel |= related.filtered(
                 lambda p: p.state not in ('done', 'cancel')
             )
+            current = order.trigas_picking_1_id | order.trigas_picking_2_id
+            if not current.filtered(lambda p: p.state == 'done'):
+                orders_to_reset |= order
 
         result = super().action_cancel()
 
         for picking in conduces_to_cancel:
             picking.action_cancel()
 
-        self.write({
-            'trigas_flow_state': 'draft',
-            'trigas_picking_1_id': False,
-            'trigas_picking_2_id': False,
-            'trigas_conduce_count': 0,
-        })
+        if orders_to_reset:
+            orders_to_reset.write({
+                'trigas_flow_state': 'draft',
+                'trigas_picking_1_id': False,
+                'trigas_picking_2_id': False,
+                'trigas_conduce_count': 0,
+                'trigas_flow_lot_ids': [(5, 0, 0)],
+                'trigas_out_truck_location_id': False,
+            })
 
         return result
 
