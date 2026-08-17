@@ -111,6 +111,13 @@ class SaleOrder(models.Model):
         for picking in conduces_to_cancel:
             picking.action_cancel()
 
+        self.write({
+            'trigas_flow_state': 'draft',
+            'trigas_picking_1_id': False,
+            'trigas_picking_2_id': False,
+            'trigas_conduce_count': 0,
+        })
+
         return result
 
     def _compute_has_trigas_cylinders(self):
@@ -249,10 +256,10 @@ class SaleOrder(models.Model):
     def _generate_trigas_conduces(self):
         self.ensure_one()
 
-        if any([
-            self.trigas_picking_1_id,
-            self.trigas_picking_2_id,
-        ]):
+        active = (self.trigas_picking_1_id | self.trigas_picking_2_id).filtered(
+            lambda p: p.state != 'cancel'
+        )
+        if active:
             return
 
         cylinder_lines = self._get_trigas_cylinder_lines()
