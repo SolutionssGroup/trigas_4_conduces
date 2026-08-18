@@ -264,33 +264,59 @@ class SaleOrder(models.Model):
     def _generate_trigas_conduces(self):
         self.ensure_one()
 
-        active = (self.trigas_picking_1_id | self.trigas_picking_2_id).filtered(
-            lambda p: p.state != 'cancel'
-        )
-        if active:
+        p1 = self.trigas_picking_1_id
+        p2 = self.trigas_picking_2_id
+
+        p1_pending = bool(p1) and p1.state not in ('done', 'cancel')
+        if p1_pending:
+            return
+
+        p1_done = bool(p1) and p1.state == 'done'
+        p2_active = bool(p2) and p2.state != 'cancel'
+
+        if p1_done and p2_active:
             return
 
         cylinder_lines = self._get_trigas_cylinder_lines()
         if not cylinder_lines:
             return
 
+        if p1_done:
+            truck_location = self.trigas_out_truck_location_id or p1.location_dest_id
+            if not truck_location:
+                raise UserError(_('No se pudo determinar la ubicación del camión para generar la entrega a cliente.'))
+            customer_location = self._get_trigas_customer_location()
+            picking_type_2 = self.env.ref('trigas_4_conduces.picking_type_trigas_step_2', raise_if_not_found=False)
+            if not picking_type_2:
+                raise UserError(_('No se encontró el tipo de operación Trigas (paso 2). Actualiza el módulo nuevamente.'))
+            new_p2 = self._create_trigas_picking(
+                name_suffix='Entrega a Cliente',
+                picking_type=picking_type_2,
+                location_id=truck_location.id,
+                location_dest_id=customer_location.id,
+                sale_lines=cylinder_lines,
+                step_code='2',
+                auto_assign=True,
+            )
+            self.write({
+                'trigas_conduce_count': 2,
+                'trigas_flow_state': 'in_progress',
+                'trigas_picking_2_id': new_p2.id,
+            })
+            return
+
         warehouse = self.warehouse_id
         if not warehouse:
             raise UserError(_('La orden de venta no tiene almacén definido.'))
-
         if not warehouse.lot_stock_id:
             raise UserError(_('El almacén no tiene ubicación de stock definida.'))
-
         pending_out_location, _pending_return_location = self._get_or_create_trigas_pending_locations(warehouse)
         customer_location = self._get_trigas_customer_location()
         stock_location = warehouse.lot_stock_id
-
         picking_type_1 = self.env.ref('trigas_4_conduces.picking_type_trigas_step_1', raise_if_not_found=False)
         picking_type_2 = self.env.ref('trigas_4_conduces.picking_type_trigas_step_2', raise_if_not_found=False)
-
         if not all([picking_type_1, picking_type_2]):
             raise UserError(_('No se encontraron los tipos de operación Trigas. Actualiza el módulo nuevamente.'))
-
         p1 = self._create_trigas_picking(
             name_suffix='Entrega a Camion',
             picking_type=picking_type_1,
@@ -300,7 +326,6 @@ class SaleOrder(models.Model):
             step_code='1',
             auto_assign=True,
         )
-
         p2 = self._create_trigas_picking(
             name_suffix='Entrega a Cliente',
             picking_type=picking_type_2,
@@ -310,7 +335,6 @@ class SaleOrder(models.Model):
             step_code='2',
             auto_assign=False,
         )
-
         self.write({
             'trigas_conduce_count': 2,
             'trigas_flow_state': 'generated',
