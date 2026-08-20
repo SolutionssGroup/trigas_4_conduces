@@ -513,11 +513,17 @@ class SaleOrder(models.Model):
         if existing_lines:
             existing_lines.unlink()
 
+        already_done_lot_ids = set(
+            picking.move_line_ids.filtered(lambda ml: ml.qty_done > 0).mapped('lot_id').ids
+        )
+
         for move in picking.move_ids_without_package:
             product_lots = lots_by_product.get(move.product_id.id, [])
             move.product_uom_qty = len(product_lots)
 
-            for lot in product_lots:
+            pending_lots = [lot for lot in product_lots if lot.id not in already_done_lot_ids]
+
+            for lot in pending_lots:
                 self.env['stock.move.line'].create({
                     'move_id': move.id,
                     'picking_id': picking.id,

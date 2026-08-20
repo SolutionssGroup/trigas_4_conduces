@@ -381,6 +381,40 @@ class StockPicking(models.Model):
 
         return res
 
+    def action_assign(self):
+        """Comprobar Disponibilidad.
+
+        Para los conduces Trigas paso 2 (Camión -> Cliente), NUNCA se debe dejar
+        que la reserva nativa de Odoo elija seriales libres de la ubicación del
+        camión: esa ubicación es un fondo compartido por muchas órdenes cargadas
+        en paralelo, y la reserva nativa no distingue a cuál orden pertenece cada
+        serial (bug confirmado en los casos S08381 y S08432).
+
+        En su lugar, se reutiliza `_load_flow_lots_into_picking`, que ya sabe
+        reservar únicamente los seriales que el propio TRI1 de esa misma orden
+        cargó (`trigas_flow_lot_ids`). Esto cubre tanto el click manual en
+        "Comprobar Disponibilidad" como cualquier llamada interna a
+        `action_assign()` sobre un picking TRI2 (incluyendo la regeneración de
+        TRI2 al reconfirmar una orden cancelada, que también pasa por aquí).
+        """
+        trigas_step_2 = self.filtered(
+            lambda p: p.is_trigas_conduce and p.trigas_step == '2' and p.sale_order_id
+        )
+        others = self - trigas_step_2
+
+        res = True
+        if others:
+            res = super(StockPicking, others).action_assign()
+
+        for picking in trigas_step_2:
+            lots = picking._trigas_get_allowed_lot_ids_for_step_2()
+            if lots:
+                picking.sale_order_id._load_flow_lots_into_picking(picking, lots)
+            else:
+                super(StockPicking, picking).action_assign()
+
+        return res
+
     def _check_warn_sms(self):
         result = super()._check_warn_sms()
         return result.filtered(lambda p: not p._trigas_barcode_is_customer_step())
@@ -794,14 +828,21 @@ class StockPicking(models.Model):
 
         expected_qty = sum(allowed_moves.mapped('product_uom_qty'))
 
-        if client_lot_ids:
-            scanned_qty = len(set([int(x) for x in client_lot_ids if x]))
-        else:
-            scanned_qty = len(
-                self.move_line_ids.filtered(
-                    lambda ml: ml.qty_done > 0 and ml.lot_id
-                )
-            ) + 1
+        # El tope SIEMPRE se calcula contra lo que ya existe realmente en la
+        # base de datos (move_line_ids con qty_done > 0), nunca contra
+        # client_lot_ids que envía el navegador. client_lot_ids vive en el
+        # estado del componente Barcode en memoria/sessionStorage y puede
+        # llegar vacío o incompleto si la sesión de PDA se reinicia tras una
+        # desconexión — eso permitía volver a escanear un lote completo de
+        # seriales sin que el tope lo bloqueara (causa raíz confirmada de la
+        # sobre-validación 8->16 vista en los casos S08370/S08422). El
+        # parámetro client_lot_ids se sigue aceptando por compatibilidad con
+        # las llamadas existentes del JS, pero ya no se usa para este cálculo.
+        scanned_qty = len(
+            self.move_line_ids.filtered(
+                lambda ml: ml.qty_done > 0 and ml.lot_id
+            )
+        ) + 1
 
         if scanned_qty > expected_qty:
             raise UserError(_(
