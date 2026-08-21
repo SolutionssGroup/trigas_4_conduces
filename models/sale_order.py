@@ -505,14 +505,25 @@ class SaleOrder(models.Model):
         if not picking:
             return
 
+        Quant = self.env['stock.quant']
+        MoveLine = self.env['stock.move.line']
+
         lots_by_product = defaultdict(list)
         for lot in lots:
             lots_by_product[lot.product_id.id].append(lot)
 
+        # Líneas de reserva previas (qty_done == 0) de una pasada anterior de
+        # esta misma función: se borran para volver a calcular desde cero.
+        # unlink() libera automáticamente cualquier reserva real que tuvieran
+        # esas líneas, así no queda cantidad "fantasma" bloqueada en el quant.
         existing_lines = picking.move_line_ids.filtered(lambda ml: ml.qty_done == 0)
         if existing_lines:
             existing_lines.unlink()
 
+        # Lotes que ya tienen una línea completada (qty_done > 0) en este picking:
+        # nunca se les debe crear una línea de reserva adicional, o se duplica la
+        # entrega (bug confirmado en S08432 / CIL-OX-TE: 3 unidades ya entregadas
+        # terminaron con 3 líneas de reserva extra sobre los mismos lotes).
         already_done_lot_ids = set(
             picking.move_line_ids.filtered(lambda ml: ml.qty_done > 0).mapped('lot_id').ids
         )
@@ -524,6 +535,41 @@ class SaleOrder(models.Model):
             pending_lots = [lot for lot in product_lots if lot.id not in already_done_lot_ids]
 
             for lot in pending_lots:
+                # TRI1 ya comprobó físicamente que este lote pertenece a esta
+                # orden. Si por el bug original de reservas duplicadas quedó
+                # una reserva "fantasma" de este mismo lote colgando en OTRO
+                # conduce (sin haberse entregado todavía, qty_done == 0), esa
+                # reserva es ilegítima y se libera antes de reservar aquí. El
+                # escaneo físico de TRI1 siempre gana sobre lo que diga el
+                # sistema (confirmado con datos reales: los lotes 24A018005 y
+                # 25A091084, cargados para S08528, habían quedado reservados
+                # por error en el conduce de otra orden distinta, S08524).
+                stray_lines = MoveLine.search([
+                    ('lot_id', '=', lot.id),
+                    ('product_id', '=', lot.product_id.id),
+                    ('location_id', '=', move.location_id.id),
+                    ('picking_id', '!=', picking.id),
+                    ('qty_done', '=', 0),
+                    ('reserved_uom_qty', '>', 0),
+                ])
+                if stray_lines:
+                    stray_lines.unlink()
+
+                # Reservar de verdad el cilindro (lote) específico en el
+                # inventario de Odoo. Sin esto, el proceso automático de
+                # reservas de Odoo puede reservar por su cuenta otros
+                # cilindros disponibles en el camión, duplicando la reserva
+                # con lotes que no son los que TRI1 cargó (bug confirmado
+                # revisando producción: conduces con el doble de líneas de
+                # las que corresponden, la mitad con lotes correctos pero
+                # sin reservar de verdad, la otra mitad con lotes distintos
+                # sí reservados).
+                reserved_quants = Quant._update_reserved_quantity(
+                    move.product_id, move.location_id, 1.0,
+                    lot_id=lot, strict=True,
+                )
+                reserved_qty = sum(qty for _, qty in reserved_quants)
+
                 self.env['stock.move.line'].create({
                     'move_id': move.id,
                     'picking_id': picking.id,
@@ -533,4 +579,11 @@ class SaleOrder(models.Model):
                     'lot_id': lot.id,
                     'location_id': move.location_id.id,
                     'location_dest_id': move.location_dest_id.id,
+                    'reserved_uom_qty': reserved_qty,
                 })
+
+            # Si ya quedó todo reservado de verdad, que Odoo lo sepa: evita
+            # que el planificador automático piense que a este move todavía
+            # le falta reservar algo.
+            if move.state in ('confirmed', 'partially_available', 'waiting'):
+                move._recompute_state()
