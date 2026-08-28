@@ -330,7 +330,51 @@ class StockPicking(models.Model):
         })
 
         self._trigas_create_or_update_signature_record()
+
+        if self.trigas_step == '2':
+            self._trigas_sync_qty_delivered_to_sale_order()
+
         return True
+
+    def _trigas_sync_qty_delivered_to_sale_order(self):
+        """Refleja en la orden de venta lo realmente entregado por camion.
+
+        El movimiento estandar de Odoo (WH/OUT) para los productos cilindro
+        se cancela al confirmar la orden (ver
+        SaleOrder._trigas_cancel_standard_delivery_pickings), porque esa
+        entrega la controla este flujo de conduce por camion en su lugar.
+        Como ese movimiento nunca llega a estado 'done', Odoo nunca calcula
+        una qty_delivered para esas lineas por si solo. Por eso, al firmar
+        el Conduce 2 (Camion -> Cliente), se recalcula aqui la cantidad
+        entregada de cada producto cilindro a partir de lo realmente
+        escaneado en los conduces firmados de esta orden, y se escribe
+        directo en la linea de venta (requiere qty_delivered_method
+        'manual' para estos productos, ver SaleOrderLine mas abajo).
+        """
+        self.ensure_one()
+
+        sale_order = self.sale_order_id
+        if not sale_order:
+            return
+
+        cylinder_lines = sale_order._get_trigas_cylinder_lines()
+        if not cylinder_lines:
+            return
+
+        signed_step_2_pickings = sale_order.picking_ids.filtered(
+            lambda p: p.is_trigas_conduce and p.trigas_step == '2' and p.trigas_delivery_signature
+        )
+
+        for line in cylinder_lines:
+            product = line.product_id
+            delivered_qty = sum(
+                signed_step_2_pickings.mapped('move_line_ids').filtered(
+                    lambda ml: ml.product_id == product and ml.lot_id
+                ).mapped('qty_done')
+            )
+            if delivered_qty and delivered_qty != line.qty_delivered:
+                line.write({'qty_delivered': delivered_qty})
+
     def action_send_trigas_delivery_email(self):
         self.ensure_one()
 
