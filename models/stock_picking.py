@@ -361,9 +361,16 @@ class StockPicking(models.Model):
         if not cylinder_lines:
             return
 
-        signed_step_2_pickings = sale_order.picking_ids.filtered(
-            lambda p: p.is_trigas_conduce and p.trigas_step == '2' and p.trigas_delivery_signature
-        )
+        # sale_order.picking_ids es el campo estandar de Odoo (entregas WH/OUT
+        # ligadas por grupo de aprovisionamiento); los conduces de este modulo
+        # se enlazan a la orden solo por el campo custom sale_order_id de
+        # stock.picking, asi que hay que buscarlos aparte.
+        signed_step_2_pickings = self.env['stock.picking'].search([
+            ('sale_order_id', '=', sale_order.id),
+            ('is_trigas_conduce', '=', True),
+            ('trigas_step', '=', '2'),
+            ('trigas_delivery_signature', '!=', False),
+        ])
 
         for line in cylinder_lines:
             product = line.product_id
