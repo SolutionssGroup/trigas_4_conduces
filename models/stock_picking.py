@@ -1174,18 +1174,36 @@ class StockPicking(models.Model):
                 'message': _('No se recibió ningún serial.'),
             }
 
-        if serial_name in existing_serials:
-            return {
-                'ok': False,
-                'message': _('El serial %s ya fue leído.') % serial_name,
-            }
+        allowed_moves = self.move_ids_without_package.filtered(
+            lambda m: m.product_id.product_tmpl_id.is_cylinder_conduce
+        )
 
-        expected_qty = sum(self.move_ids_without_package.mapped('product_uom_qty'))
-        if expected_qty and len(existing_serials) >= expected_qty:
-            return {
-                'ok': False,
-                'message': _('Ya se leyó la cantidad completa esperada.'),
-            }
+        # TRIGAS FIX CONDUCE 1: el duplicado y el tope máximo de seriales
+        # SIEMPRE se validan contra lo que ya está realmente guardado en la
+        # base de datos (move_line_ids), nunca contra existing_serials que
+        # manda el navegador. existing_serials vive en sessionStorage (por
+        # pestaña) y se puede perder o resetear si la pestaña se recarga o
+        # el dispositivo la descarta por memoria, lo que permitía que el
+        # conteo real en Odoo quedara corto sin que el operador se diera
+        # cuenta hasta validar el Conduce 1 (caso confirmado: 12 esperados /
+        # 11 escaneados en Cibao).
+        if not tri3_open_pickup:
+            already_done_lines = self.move_line_ids.filtered(
+                lambda ml: ml.lot_id and ml.qty_done > 0 and ml.product_id.product_tmpl_id.is_cylinder_conduce
+            )
+
+            if serial_name in already_done_lines.mapped('lot_id.name'):
+                return {
+                    'ok': False,
+                    'message': _('El serial %s ya fue leído.') % serial_name,
+                }
+
+            expected_qty = sum(allowed_moves.mapped('product_uom_qty'))
+            if expected_qty and len(already_done_lines) >= expected_qty:
+                return {
+                    'ok': False,
+                    'message': _('Ya se leyó la cantidad completa esperada.'),
+                }
 
         lot = self.env['stock.lot'].search([
             ('name', '=', serial_name),
@@ -1234,7 +1252,7 @@ class StockPicking(models.Model):
                 ),
             }
 
-        allowed_products = self.move_ids_without_package.mapped('product_id')
+        allowed_products = allowed_moves.mapped('product_id') or self.move_ids_without_package.mapped('product_id')
 
         if lot.product_id and lot.product_id not in allowed_products:
             expected_products = ', '.join(allowed_products.mapped('display_name'))
@@ -1255,6 +1273,31 @@ class StockPicking(models.Model):
                     'ok': False,
                     'message': str(e),
                 }
+
+        # TRIGAS FIX CONDUCE 1: guardar el serial en la base de datos en el
+        # mismo momento del escaneo, no esperar a que el navegador mande la
+        # lista completa más adelante. Así el conteo real en Odoo nunca
+        # depende de que la pestaña/sesión del navegador sobreviva hasta el
+        # final del Conduce 1.
+        move = False
+        for candidate_move in allowed_moves:
+            if candidate_move.product_id.id == lot.product_id.id:
+                move = candidate_move
+                break
+        if not move:
+            move = (allowed_moves or self.move_ids_without_package)[:1]
+
+        if move:
+            self.env['stock.move.line'].create({
+                'picking_id': self.id,
+                'move_id': move.id,
+                'product_id': move.product_id.id,
+                'product_uom_id': move.product_uom.id,
+                'location_id': move.location_id.id,
+                'location_dest_id': move.location_dest_id.id,
+                'lot_id': lot.id,
+                'qty_done': 1.0,
+            })
 
         return {
             'ok': True,
@@ -1285,34 +1328,51 @@ class StockPicking(models.Model):
         allowed_product_ids = allowed_moves.mapped('product_id').ids
         expected_qty = int(sum(allowed_moves.mapped('product_uom_qty')))
 
-        if expected_qty and len(serial_names) > expected_qty:
+        # TRIGAS FIX CONDUCE 1: este método ya NO borra los seriales que
+        # estén guardados en Odoo con qty_done > 0 (escaneos ya confirmados,
+        # guardados uno por uno al momento de escanear por
+        # trigas_barcode_validate_temp_serial_for_pda). Antes se borraba
+        # TODO lo que hubiera y se recreaba solo con lo que mandara el
+        # navegador en serial_names; si esa lista llegaba incompleta (por
+        # ejemplo por un reinicio de la pestaña/sessionStorage), este
+        # método terminaba BORRANDO escaneos reales ya guardados. Ahora
+        # solo se limpian líneas viejas sin escaneo real (lot_id con
+        # qty_done <= 0, restos de reservas) y se completan los seriales de
+        # serial_names que todavía no estén guardados, sin tocar los que ya
+        # están.
+        stale_serial_lines = self.move_line_ids.filtered(
+            lambda ml: (
+                ml.lot_id
+                and (not allowed_product_ids or ml.product_id.id in allowed_product_ids)
+                and ml.qty_done <= 0
+            )
+        )
+        stale_serial_lines.unlink()
+
+        already_done_lines = self.move_line_ids.filtered(
+            lambda ml: ml.lot_id and ml.qty_done > 0 and (
+                not allowed_product_ids or ml.product_id.id in allowed_product_ids
+            )
+        )
+        already_done_names = set(already_done_lines.mapped('lot_id.name'))
+
+        missing_serials = [s for s in serial_names if s not in already_done_names]
+
+        total_after = len(already_done_lines) + len(missing_serials)
+        if expected_qty and total_after > expected_qty:
             raise UserError(_(
                 'No puedes guardar más seriales que la cantidad esperada. '
                 'Cantidad esperada: %s. Cantidad recibida: %s.'
-            ) % (expected_qty, len(serial_names)))
+            ) % (expected_qty, total_after))
 
         if self._trigas_barcode_is_truck_step():
-            for serial_name in serial_names:
+            for serial_name in missing_serials:
                 lot = self.env['stock.lot'].search([('name', '=', serial_name)], limit=1)
                 if not lot:
                     raise UserError(_('No se encontró el serial %s.') % serial_name)
                 self._trigas_validate_step_1_serial_physical_availability(lot)
 
-        # TRI1 usa una lista seleccionada por PDA. Al reabrir o reservar, Odoo puede
-        # dejar líneas con lot_id y qty_done = 0; deben reemplazarse, no acumularse.
-        if self.is_trigas_conduce and self.trigas_step == '1':
-            old_serial_lines = self.move_line_ids.filtered(
-                lambda ml: ml.lot_id and (
-                    not allowed_product_ids or ml.product_id.id in allowed_product_ids
-                )
-            )
-        else:
-            old_serial_lines = self.move_line_ids.filtered(
-                lambda ml: ml.lot_id and ml.qty_done > 0
-            )
-        old_serial_lines.unlink()
-
-        if not serial_names:
+        if not missing_serials:
             if self.state not in ('done', 'cancel'):
                 self.action_confirm()
                 self.action_assign()
@@ -1326,7 +1386,7 @@ class StockPicking(models.Model):
         for move in self.move_ids_without_package:
             moves_by_product.setdefault(move.product_id.id, move)
 
-        for serial_name in serial_names:
+        for serial_name in missing_serials:
             lot = self.env['stock.lot'].search([('name', '=', serial_name)], limit=1)
 
             if not lot:
