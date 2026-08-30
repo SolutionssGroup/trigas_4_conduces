@@ -1284,10 +1284,26 @@ class StockPicking(models.Model):
             product = lot.product_id
             move = moves_by_product.get(product.id)
 
+            # FIX 2: Si no hay move que coincida con el producto del serial,
+            # no usar fallback silencioso. En cambio, validar explícitamente
+            # que el serial pertenece a un producto esperado en este picking.
             if not move:
-                # Si por alguna razón el lote no tiene product_id o no coincide,
-                # usamos la primera línea del picking como respaldo.
-                move = self.move_ids_without_package[:1]
+                if not lot.product_id:
+                    return {
+                        'ok': False,
+                        'message': _('El serial %s no tiene producto asignado.') % serial_name,
+                    }
+
+                # Serial tiene producto pero no hay move en este picking para ese producto
+                expected_products = ', '.join(allowed_products.mapped('display_name'))
+                return {
+                    'ok': False,
+                    'message': _('El serial %(serial)s pertenece al producto "%(serial_product)s", pero este conduce solo espera: "%(expected_product)s".') % {
+                        'serial': serial_name,
+                        'serial_product': lot.product_id.display_name,
+                        'expected_product': expected_products,
+                    },
+                }
 
             if not move:
                 raise UserError(_('No existe una línea de movimiento para guardar el serial %s.') % serial_name)
