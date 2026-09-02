@@ -429,6 +429,22 @@ class StockPicking(models.Model):
 
             if picking.trigas_step == '1':
                 picking.sale_order_id._after_validate_trigas_step_1(picking)
+            elif picking.trigas_step == '2':
+                # Categoria A (ver casos S08650, S08673, S08685, S08691, S08692,
+                # S08693, S08696, S08698, S08699, S08703, S08684, S08705):
+                # _trigas_sync_qty_delivered_to_sale_order() ya existia, pero
+                # solo se disparaba al guardar la firma
+                # (trigas_barcode_save_delivery_signature), no al validar. La
+                # firma se guarda unos segundos ANTES de que el conduce quede
+                # en 'done' (confirmado contra datos reales de produccion), asi
+                # que cualquier cilindro escaneado entre la firma y el click en
+                # "Validar" nunca se contaba -> qty_delivered se quedaba en 0 o
+                # parcial y el pedido no se podia facturar aunque el cliente ya
+                # tuviera el cilindro. Al llamarlo tambien aqui, despues de
+                # super().button_validate(), se recalcula con el estado final
+                # y completo del conduce (metodo idempotente, es seguro
+                # llamarlo dos veces).
+                picking._trigas_sync_qty_delivered_to_sale_order()
 
         return res
 
