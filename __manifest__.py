@@ -1,6 +1,6 @@
 {
     'name': 'Trigas Conduces',
-    'version': '16.0.1.0.0',
+    'version': '16.0.1.1.0',
     'summary': 'Flujo de conduces para cilindros Trigas',
     'description': 'Genera automáticamente los conduces de entrega para productos cilindro.',
     'author': 'Solutions Group',
@@ -20,6 +20,7 @@
         'views/product_views.xml',
         'views/res_partner_views.xml',
         'views/sale_order_views.xml',
+        'views/sale_order_line_views.xml',
         'views/stock_picking_views.xml',
         'views/stock_location_views.xml',
         'views/stock_barcode_action_views.xml',

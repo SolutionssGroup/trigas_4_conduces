@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Casilla "Venta definitiva" en la línea del pedido, visible solo para
+         productos con el flujo Trigas de 4 conduces activado. El vendedor la
+         marca al armar la orden, antes de confirmarla. -->
+    <record id="sale_order_form_trigas_definitive_sale" model="ir.ui.view">
+        <field name="name">sale.order.form.trigas.definitive.sale</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_line']//field[@name='product_uom_qty']" position="after">
+                <field name="trigas_is_cylinder_conduce_product" column_invisible="1"/>
+                <field
+                    name="trigas_definitive_sale"
+                    invisible="not trigas_is_cylinder_conduce_product"
+                    widget="boolean_toggle"
+                />
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_sale_order_line_trigas_definitive_sale_tree" model="ir.ui.view">
+        <field name="name">sale.order.line.trigas.definitive.sale.tree</field>
+        <field name="model">sale.order.line</field>
+        <field name="arch" type="xml">
+            <tree string="Ventas definitivas de cilindros" create="0" delete="0">
+                <field name="order_id"/>
+                <field name="order_partner_id"/>
+                <field name="product_id"/>
+                <field name="product_uom_qty"/>
+                <field name="qty_delivered"/>
+                <field name="qty_invoiced"/>
+                <field name="trigas_definitive_sale_cost_booked" widget="boolean_toggle"/>
+                <field name="trigas_definitive_sale_cost_pending"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_sale_order_line_trigas_definitive_sale_search" model="ir.ui.view">
+        <field name="name">sale.order.line.trigas.definitive.sale.search</field>
+        <field name="model">sale.order.line</field>
+        <field name="arch" type="xml">
+            <search string="Ventas definitivas de cilindros">
+                <field name="order_id"/>
+                <field name="order_partner_id"/>
+                <field name="product_id"/>
+                <filter
+                    string="Costo pendiente"
+                    name="pending_cost"
+                    domain="[('trigas_definitive_sale_cost_pending', '=', True)]"
+                />
+                <group expand="0" string="Agrupar por">
+                    <filter string="Cliente" name="group_by_partner" context="{'group_by': 'order_partner_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_sale_order_line_trigas_definitive_sale" model="ir.actions.act_window">
+        <field name="name">Ventas definitivas de cilindros</field>
+        <field name="res_model">sale.order.line</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_sale_order_line_trigas_definitive_sale_tree"/>
+        <field name="search_view_id" ref="view_sale_order_line_trigas_definitive_sale_search"/>
+        <field name="domain">[('trigas_definitive_sale', '=', True)]</field>
+        <field name="context">{'search_default_pending_cost': 1}</field>
+    </record>
+
+    <menuitem id="menu_trigas_definitive_sale_root"
+              name="Ventas definitivas"
+              parent="stock.menu_stock_root"
+              sequence="85"/>
+
+    <menuitem id="menu_trigas_definitive_sale"
+              name="Ventas definitivas de cilindros"
+              parent="menu_trigas_definitive_sale_root"
+              action="action_sale_order_line_trigas_definitive_sale"
+              sequence="10"/>
+</odoo>
