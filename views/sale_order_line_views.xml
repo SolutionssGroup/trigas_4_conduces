@@ -12,7 +12,7 @@
                 <field name="trigas_is_cylinder_conduce_product" column_invisible="1"/>
                 <field
                     name="trigas_definitive_sale"
-                    invisible="not trigas_is_cylinder_conduce_product"
+                    attrs="{'invisible': [('trigas_is_cylinder_conduce_product', '=', False)]}"
                     widget="boolean_toggle"
                 />
             </xpath>
