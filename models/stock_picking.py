@@ -942,11 +942,25 @@ class StockPicking(models.Model):
         return True
 
     def _trigas_is_native_internal_transfer(self):
+        """Fix 5: solo interceptamos transferencias internas que de verdad
+        pasan por el flujo de escaneo PDA de cilindros. Si el picking no
+        tiene ningún move de producto serializado, no hay nada que un
+        usuario pudiera haber escaneado por PDA, y esta validación
+        (pensada para cilindros) no debe aplicar — por ejemplo, las
+        transferencias de liquidación/merma de oxígeno líquido a granel
+        (litros, sin serie) creadas directo desde el backend, que nunca
+        podrán tener trigas_native_source_location_id definido y quedaban
+        bloqueadas con 'No se ha definido la ubicación origen de la
+        transferencia.' sin importar qué usuario intentara validarlas.
+        """
         self.ensure_one()
         return bool(
             not self.is_trigas_conduce
             and self.picking_type_id
             and self.picking_type_id.code == 'internal'
+            and self.move_ids_without_package.filtered(
+                lambda m: m.product_id.tracking == 'serial'
+            )
         )
 
     def _trigas_get_unique_internal_location_for_lot(self, lot):
