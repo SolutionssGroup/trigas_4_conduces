@@ -16,12 +16,30 @@
                  campo nuevo al <form> (invisible en la tabla) en vez de al
                  <tree> (lo que realmente se ve en pantalla). -->
             <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="after">
-                <field name="trigas_is_cylinder_conduce_product" column_invisible="1"/>
+                <!-- invisible="1" (no column_invisible="1"): column_invisible es
+                     sintaxis de Odoo 17, en Odoo 16 se ignora silenciosamente y el
+                     campo técnico terminaba mostrándose como columna real. -->
+                <field name="trigas_is_cylinder_conduce_product" invisible="1"/>
                 <field
                     name="trigas_definitive_sale"
-                    attrs="{'invisible': [('trigas_is_cylinder_conduce_product', '=', False)]}"
+                    attrs="{
+                        'invisible': [('trigas_is_cylinder_conduce_product', '=', False)],
+                        'readonly': [('id', '=', False)]
+                    }"
                     widget="boolean_toggle"
                 />
+                <!-- readonly cuando id=False (línea todavía no guardada): Odoo 16
+                     tiene un bug conocido en el widget legado de la lista de líneas
+                     (section_and_note_one2many) donde, en una orden SIN GUARDAR,
+                     marcar cualquier campo de "commit inmediato" (como un toggle)
+                     dispara una validación interna de TODOS los campos de la línea,
+                     incluyendo campos estándar de Odoo (qty_delivered,
+                     customer_lead, etc.) que usan "parent.state" en su dominio.
+                     Esa validación revienta con "Unknown field parent.state in
+                     domain" porque el registro padre (la orden) aún no existe.
+                     Bloqueamos el toggle hasta que la línea tenga id (o sea, hasta
+                     que la orden se haya guardado al menos una vez) para que el
+                     usuario nunca vea ese error. -->
             </xpath>
         </field>
     </record>
