@@ -8,7 +8,14 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='order_line']//field[@name='product_uom_qty']" position="after">
+            <!-- IMPORTANTE: el field "order_line" tiene DOS subvistas internas
+                 (un <form> para editar la línea en detalle y un <tree> para las
+                 columnas de la tabla). Hay que anclar el xpath específicamente
+                 dentro del <tree>, porque "product_uom_qty" también existe
+                 dentro del <form> interno; si el xpath no distingue, ata el
+                 campo nuevo al <form> (invisible en la tabla) en vez de al
+                 <tree> (lo que realmente se ve en pantalla). -->
+            <xpath expr="//field[@name='order_line']/tree//field[@name='product_uom_qty']" position="after">
                 <field name="trigas_is_cylinder_conduce_product" column_invisible="1"/>
                 <field
                     name="trigas_definitive_sale"
