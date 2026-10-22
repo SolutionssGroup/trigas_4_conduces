@@ -1276,7 +1276,10 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
                 ),
                 { type: 'danger' }
             );
-            return false;
+            // null = error ya notificado al usuario; el escaneo debe abortar.
+            // false = el backend indica que la regla Trigas no aplica a este
+            // serial/transferencia; el escaneo continúa con el flujo nativo.
+            return null;
         }
     },
 
@@ -1513,7 +1516,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
         }
         if (!step && parsedBarcodeData?.lot?.id && this._trigasIsNativeInternalTransferCandidate()) {
             const nativeResult = await this._trigasValidateNativeInternalSerial(parsedBarcodeData.lot.id);
-            if (!nativeResult) {
+            if (nativeResult === null) {
                 return false;
             }
         }
@@ -1651,7 +1654,7 @@ patch(BarcodePickingModel.prototype, 'trigas_4_conduces.BarcodePickingModel', {
 
         if (!step && barcodeData?.lot?.id && this._trigasIsNativeInternalTransferCandidate()) {
             const nativeResult = await this._trigasValidateNativeInternalSerial(barcodeData.lot.id);
-            if (!nativeResult) {
+            if (nativeResult === null) {
                 return false;
             }
         }
