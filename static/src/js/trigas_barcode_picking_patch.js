@@ -9,6 +9,22 @@ import GroupedLineComponent from '@stock_barcode/components/grouped_line';
 import { patch } from '@web/core/utils/patch';
 import { _t } from '@web/core/l10n/translation';
 
+// Fix 8: decide si el texto de la pantalla corresponde al Conduce 2 (entrega
+// al cliente). Antes bastaba con que apareciera "CLIENTES_TRIGAS/", pero una
+// transferencia interna (INT), TRI1 o TRI3 que sale de la ubicacion de un
+// cliente tambien lo muestra como origen, y quedaba bloqueada con
+// "Debes escanear todos los seriales antes de validar." (logica de Conduce 2).
+window.trigasIsConduce2ScreenText = function (text) {
+    text = text || '';
+    if (text.includes('/TRI2/') || text.includes('Conduce 2')) {
+        return true;
+    }
+    if (/\/(INT|TRI1|TRI3)\/\d+/.test(text)) {
+        return false;
+    }
+    return text.includes('CLIENTES_TRIGAS/');
+};
+
 window.trigasRemovePostValidateTransition = window.trigasRemovePostValidateTransition || function () {
     if (document.body) {
         document.body.classList.remove('trigas-post-validate-transition');
@@ -6534,11 +6550,7 @@ function trigasFixApplyValidateGreenState() {
 
     function trigasC2LooksLikeConduce2Screen() {
         const text = document.body ? document.body.innerText : '';
-        return (
-            text.includes('/TRI2/') ||
-            text.includes('Conduce 2') ||
-            text.includes('CLIENTES_TRIGAS/')
-        );
+        return window.trigasIsConduce2ScreenText(text);
     }
 
     function trigasC2AttachValidateInterceptor() {
@@ -6704,11 +6716,7 @@ function trigasFixApplyValidateGreenState() {
 
     function trigasC2SignIsScreen() {
         const text = document.body ? document.body.innerText || '' : '';
-        return (
-            text.includes('/TRI2/') ||
-            text.includes('Conduce 2') ||
-            text.includes('CLIENTES_TRIGAS/')
-        );
+        return window.trigasIsConduce2ScreenText(text);
     }
 
     function trigasC2SignHasCompleteSerials() {
@@ -7098,11 +7106,7 @@ function trigasFixApplyValidateGreenState() {
 
     function trigasC2FlowIsScreen() {
         const text = document.body ? document.body.innerText || '' : '';
-        return (
-            text.includes('/TRI2/') ||
-            text.includes('Conduce 2') ||
-            text.includes('CLIENTES_TRIGAS/')
-        );
+        return window.trigasIsConduce2ScreenText(text);
     }
 
     function trigasC2FlowHasCompleteSerials() {
